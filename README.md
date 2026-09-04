@@ -1,0 +1,1 @@
+# oslava-events-app
