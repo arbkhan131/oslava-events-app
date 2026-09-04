@@ -98,7 +98,7 @@ Environment configuration must separate local, development, and production value
 
 **Objective:** Close every decision required for Phases 1-2, record later decisions with a named phase deadline, and turn the blueprint acceptance scenarios into executable test cases before feature work starts.
 
-**Files/components involved:** `docs/*`, planned `test/acceptance/`, planned `supabase/tests/`.
+**Files/components involved:** `docs/IMPLEMENTATION_PLAN.md`, `docs/PHASE_0_ACCEPTANCE_TEST_SPECIFICATIONS.md`, planned `test/acceptance/`, planned `supabase/tests/`.
 
 **Database changes:** None.
 
@@ -107,6 +107,8 @@ Environment configuration must separate local, development, and production value
 **Completion criteria:** All decisions required before early foundation implementation are recorded as closed. Every intentionally deferred decision has an explicit deadline before its owning phase. Each blueprint acceptance scenario has inputs, expected result, and responsible test layer.
 
 **Dependencies:** None.
+
+**Phase 0 completion record:** Complete. Phase 1-2 decisions are verified closed, detailed acceptance specifications are recorded in `PHASE_0_ACCEPTANCE_TEST_SPECIFICATIONS.md`, each specification has a responsible layer, and all intentional deferrals have named phase deadlines. No Flutter feature, package, migration, RPC, local database fixture, or remote Supabase change was created.
 
 ### Phase 1 - Flutter project foundation
 

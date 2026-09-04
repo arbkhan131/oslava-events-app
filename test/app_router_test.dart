@@ -1,0 +1,77 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:oslava_events/app/app.dart';
+import 'package:oslava_events/app/bootstrap.dart';
+import 'package:oslava_events/app/router/app_router.dart';
+import 'package:oslava_events/core/config/app_environment.dart';
+import 'package:oslava_events/features/auth/application/auth_session.dart';
+
+void main() {
+  group('roleAwareRedirect', () {
+    test('sends unauthenticated users to Login', () {
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: false,
+          role: null,
+          location: '/worker',
+        ),
+        '/login',
+      );
+    });
+
+    test('sends authenticated workers to the worker shell', () {
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: true,
+          role: AppRole.worker,
+          location: '/login',
+        ),
+        '/worker',
+      );
+    });
+
+    test('prevents authenticated users from opening another role shell', () {
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: true,
+          role: AppRole.admin,
+          location: '/worker',
+        ),
+        '/admin',
+      );
+    });
+  });
+
+  for (final role in AppRole.values) {
+    testWidgets('${role.label} reaches the correct empty shell', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appEnvironmentProvider.overrideWithValue(
+              AppEnvironment.fromValues(
+                environment: 'local',
+                supabaseUrl: '',
+                supabaseAnonKey: '',
+              ),
+            ),
+            authSessionProvider.overrideWith(
+              (ref) => AppSession(
+                userId: 'test-user',
+                role: role,
+                displayName: 'Test User',
+              ),
+            ),
+          ],
+          child: const OslavaApp(),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text(role.label), findsOneWidget);
+      expect(find.text('Workspace shell ready'), findsOneWidget);
+    });
+  }
+}
