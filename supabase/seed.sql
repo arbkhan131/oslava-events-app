@@ -1,0 +1,3 @@
+-- Phase 2 seed placeholder.
+-- Approved bootstrap data is added in later phases through reviewed migrations
+-- or secure admin tooling. No remote seed operation is performed in Phase 2.
