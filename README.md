@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # oslava_events
 
 A new Flutter project.
@@ -15,3 +16,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# oslava-events-app
+>>>>>>> a7616824d89c7a93d56a02e333e4dcd926ae7f4a
