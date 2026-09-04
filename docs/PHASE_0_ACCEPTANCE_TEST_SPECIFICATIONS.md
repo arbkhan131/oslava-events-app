@@ -42,12 +42,17 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 
 | ID | Specification | Responsible layer |
 |---|---|---|
-| AT-001 | Register a Worker with a unique normalized phone and password. Expect one authenticated identity, generated numeric Worker ID, ACTIVE account, F category, and immediate session access. | Supabase/database; Flutter integration |
+| AT-001 | Register a Worker with a unique normalized phone and password, complete required profile fields, provide a private profile photo, and pass the 18+ DOB check. Expect one authenticated identity, generated numeric Worker ID, ACTIVE account, F category, and immediate session access. | Supabase/database; Flutter integration |
 | AT-002 | Attempt registration with a phone that normalizes to an existing phone. Expect one account only and a safe duplicate-phone error. | Supabase/database |
 | AT-003 | Sign in each role with phone plus password. Attempt the same password flow using only a numeric Worker ID. Expect phone login success and Worker-ID login rejection. | Supabase/database; Flutter integration |
+| AT-003A | Start password recovery for a registered phone. Expect SMS OTP recovery metadata to be recorded with the selected environment and no SMS provider secret bundled in Flutter. Verify OTP then set a new password. | Supabase/database; Flutter integration |
+| AT-003B | Attempt phone reassignment after manual verification. Expect Admin/Super Admin to change Worker/Captain/Supervisor phone numbers; expect Super Admin to change Admin phone numbers through the controlled flow; expect the existing Auth/profile phone to change, old/new phone plus actor/reason/timestamp to be audited, and no second account to be created. Attempt Worker/Captain/Supervisor self-service changes and expect denial. Attempt Admin changing Admin/Super Admin phone and expect denial. | Supabase/database |
+| AT-003C | Submit Worker registration with DOB under 18 on the registration date. Expect server-side rejection. Submit pre-provisioned staff account without Worker DOB and expect the Worker age rule not to apply. | Supabase/database; Flutter integration |
+| AT-003D | Upload profile photos with JPEG, PNG, and WebP MIME types under 5 MB and expect acceptance into the private profile-photo bucket. Upload unsupported MIME type or oversized source file and expect storage/server-side rejection. Verify Flutter compression targets about 1 MB where practical. | Supabase/database; Flutter unit/integration |
 | AT-004 | Try direct client mutation of role, account status, Worker ID, current category, and reliability. Expect denial. | Supabase/database RLS/RPC |
 | AT-005 | Try Apply while any required Worker field or profile photo is incomplete. Expect an authoritative profile-incomplete rejection; complete the profile and expect the request to proceed to normal validation. | Supabase/database; Flutter widget |
-| AT-006 | Change a Worker to Captain or Supervisor. Expect current category null, last Worker category retained, category history preserved, and an audit record. Return the user to Worker without an override and expect the prior category restored. | Supabase/database |
+| AT-006 | Change a Worker to Captain or Supervisor. Expect current category null, last Worker category retained, category history preserved, new Worker applications blocked by role, existing confirmed assignments retained for Admin/Super Admin resolution under the `WORKER_ROLE_CHANGED`/`ROLE_CHANGED` flag contract, active waitlist entries withdrawn without penalty once waitlist exists, and an audit record. Return the user to Worker without an override and expect the prior category restored; do not restore old withdrawn waitlist entries. | Supabase/database |
+| AT-006A | Revoke a directly provisioned staff-only Captain/Supervisor with no previous Worker profile. Expect `account_status = INACTIVE`, stored role retained as historical/admin metadata, no operational privileges, actor/reason/timestamp audit, and no implicit Worker profile/category creation. Later explicit Worker onboarding must complete required Worker profile data and start at F. | Supabase/database |
 | AT-007 | Return a former Worker to Worker with an Admin-selected restoration category. Expect the selected result and an explicit audited restoration override. | Supabase/database |
 | AT-008 | Verify role authority: Super Admin can create/revoke Admin, Captain, and Supervisor roles; Admin can create/revoke Captain/Supervisor only; neither can alter Super Admin outside its authority. | Supabase/database RLS/RPC |
 | AT-009 | Verify Captain/Supervisor can search and view all Workers and worker history, but cannot create/revoke staff roles or Detain/Release. | Supabase/database RLS; Flutter widget |
@@ -56,8 +61,8 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 
 | ID | Specification | Responsible layer |
 |---|---|---|
-| AT-010 | Create a valid event in `Asia/Kolkata` with INR wages/allowances. Verify `reporting_at <= work_starts_at < expected_ends_at`, 12-hour client display, and distinct `event_status`/`recruitment_status`. | Supabase/database; Flutter widget |
-| AT-011 | Try to create/edit an event as Worker, Captain, or Supervisor. Expect denial. Verify Admin/Super Admin can perform allowed event mutations. | Supabase/database RLS/RPC |
+| AT-010 | Create a valid event in `Asia/Kolkata` with INR wages/allowances. Verify `reporting_at <= work_starts_at < expected_ends_at`, 12-hour client display, and distinct `event_status`/`recruitment_status`. Verify publish enters `UPCOMING` immediately when the event date has already started in `Asia/Kolkata`, reporting-time automation enters `IN_PROGRESS` and closes recruitment, completion/closure are manual, and in-progress emergency cancellation requires a reason. | Supabase/database; Flutter widget |
+| AT-011 | Try to create/edit/publish/cancel/complete/close an event as Worker, Captain, or Supervisor. Expect denial. Verify Admin/Super Admin can perform allowed event mutations. | Supabase/database RLS/RPC |
 | AT-012 | Publish Standard, Urgent, Emergency, and Custom tier plans. Verify A/B/C/F opening times, including a deliberately delayed custom A. | Supabase/database |
 | AT-013 | At each tier opening, verify eligibility is cumulative: opening B retains A, opening C retains A+B, and opening F retains A+B+C. | Supabase/database |
 | AT-014 | A Worker below the open tier can view full event detail as Locked but cannot Apply. When eligible, the same event becomes Available without client-side category calculation deciding the mutation. | Supabase/database; Flutter widget/integration |
@@ -75,7 +80,8 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | AT-021 | With one final seat, submit two same-category requests inside the same window. Expect earliest server-received request to win; UUID is deterministic only when receipt timestamps tie. | Supabase/database multi-session |
 | AT-022 | Submit a request outside a closed final-seat arbitration window. Expect it not to compete with the previous window. | Supabase/database multi-session |
 | AT-023 | Confirm event A ending 4:00 PM and apply for event B reporting at 5:00 PM. Expect success. Repeat with A ending 4:30 PM or after B reporting time. Expect `CONFLICT`. | Supabase/database |
-| AT-024 | Edit an event time so existing confirmed assignments violate the one-hour rule. Expect retained assignments plus an Admin review flag; no silent cancellation. | Supabase/database |
+| AT-024 | Edit an event time so existing confirmed assignments violate the one-hour rule. Expect server-side detection, Admin/Super Admin warning, explicit confirmation requirement, retained assignments, one `EVENT_TIME_CONFLICT` Admin review flag per affected assignment/conflict, event/version/cause audit data, no automatic priority, and no silent cancellation. Executable integration coverage is deferred until `assignments` and the conflict predicate exist. | Supabase/database |
+| AT-024A | Attempt ordinary event capacity reduction below active confirmed assignment count. Expect rejection and no automatic worker removal. Explicit management removal must select assignment(s), require a reason, audit/history, notify affected workers, mark management-removed status, and carry no worker reliability penalty. Executable integration coverage is deferred until `assignments`, notifications, and management removal exist. | Supabase/database |
 | AT-025 | For a 4:00 PM reporting time, cancel at 2:45 PM and exactly 3:00 PM. Expect success. Cancel at 3:01 PM. Expect `CANCELLATION_LOCKED`. | Supabase/database; Flutter widget boundary messaging |
 | AT-026 | Apply after the cancellation deadline without acknowledgement. Expect a late-booking warning/result requiring acknowledgement. With acknowledgement, allow normal Apply validation but keep cancellation locked on confirmation. | Supabase/database; Flutter widget |
 
@@ -90,7 +96,7 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | AT-031 | Refill a vacancy from waiting A, B, C, and F Workers. Expect current category priority A>B>C>F, then earliest valid join time within a category. | Supabase/database multi-session |
 | AT-032 | Before promoting a queued Worker, make the account restricted, introduce a conflict, or invalidate requirements. Expect the candidate skipped with an audit reason and the next valid candidate considered. | Supabase/database |
 | AT-033 | Have Admin Detain a Worker with no assignment. Expect future Apply and waitlist promotion blocked. Try the same mutation as Captain/Supervisor. Expect denial. | Supabase/database RLS/RPC |
-| AT-034 | Detain a Worker with confirmed assignments. Expect assignments retained, one Admin review flag per unresolved assignment, and no duplicate flag on an idempotent retry. | Supabase/database |
+| AT-034 | Detain a Worker with confirmed assignments. Expect assignments retained, one Admin review flag per unresolved assignment, and no duplicate flag on an idempotent retry. Phase 4 defines the flag contract; executable integration coverage is deferred until `assignments` exists. | Supabase/database |
 
 ### Attendance, performance, category, and reliability boundaries
 
@@ -122,8 +128,8 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | Phase 1 | AT-045, AT-046, AT-047 |
 | Phase 2 | AT-004, AT-008, AT-011, AT-042, AT-043, AT-044 |
 | Phase 3 | AT-001 to AT-009 |
-| Phase 4 | AT-009, AT-033, AT-034, plus role/category restoration coverage |
-| Phase 5 | AT-010, AT-011, AT-024 |
+| Phase 4 | AT-006 staff-only revocation and Worker-to-field contract, AT-006A, AT-009, AT-033, AT-034 contract coverage, plus role/category restoration coverage |
+| Phase 5 | AT-010, AT-011, AT-024/AT-024A contract coverage; AT-024/AT-024A executable assignment integration deferred until `assignments`, conflict predicates, management removal, and notifications exist |
 | Phase 6 | AT-012 to AT-016 |
 | Phase 7 | AT-014, AT-015, AT-027, AT-045 |
 | Phase 8 | AT-023, AT-024 |
@@ -139,9 +145,9 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 
 | Decision | Required before | Effect on Phase 0 |
 |---|---|---|
-| Password reset/recovery, phone reassignment, minimum Worker age, and profile-photo file limits | Phase 3 | Documented as deferred; does not block Phases 1-2. |
-| Staff-only Captain/Supervisor role revocation destination and Worker-to-field-role effect on existing assignments/waitlist rows | Phase 4 | Documented as deferred; role authority model is sufficient for Phases 1-2. |
-| Capacity-reduction/removal workflow, event-time-conflict resolution, and exact automatic/manual lifecycle transition timing | Phase 5 | Documented as deferred; split state model is closed. |
+| Password reset/recovery, phone reassignment, minimum Worker age, and profile-photo file limits | Phase 3 | Closed before Phase 3: SMS OTP recovery, non-self-service audited phone reassignment with Admin limited to Worker/Captain/Supervisor targets and Admin phones requiring Super Admin, Worker minimum age 18, private JPEG/PNG/WebP photos capped at 5 MB and client-compressed toward about 1 MB. |
+| Staff-only Captain/Supervisor role revocation destination and Worker-to-field-role effect on existing assignments/waitlist rows | Phase 4 | Closed before Phase 4: staff-only revocation sets account `INACTIVE` without Worker conversion; former Workers may return to Worker with restored category; Worker-to-field retains confirmed assignments for Admin review and withdraws active waitlist entries without penalty when those tables exist. |
+| Capacity-reduction/removal workflow, event-time-conflict resolution, and exact automatic/manual lifecycle transition timing | Phase 5 | Closed before Phase 5: ordinary capacity reduction cannot go below active confirmed assignments; lower capacity requires explicit management removal; conflict-producing time edits require warning/confirmation and flags; lifecycle/recruitment timing rules are finalized with Phase 6/booking integration boundaries recorded. |
 | Reliability weights, minimum sample, cancellation contribution, performance aggregation, and recompute timing | Phase 13 | Intentionally deferred; no scoring formula is selected. |
 | Reporting reminder lead time and notification quiet-time behavior | Phase 14 | Documented as deferred. |
 | Retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident response | Phase 16 | Intentionally deferred; production hardening cannot complete without it. |

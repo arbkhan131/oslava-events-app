@@ -38,7 +38,7 @@ PostgreSQL enum labels can be lowercase internally if the API mapping is consist
 
 ### `auth.users`
 
-Supabase Auth owns credentials and sessions. Every user authenticates with their unique normalized phone number plus password. Application code never reads password hashes. Numeric Worker ID is not accepted as an authentication credential.
+Supabase Auth owns credentials and sessions. Every user authenticates with their unique normalized phone number plus password. Application code never reads password hashes. Numeric Worker ID is not accepted as an authentication credential. Password recovery is included in V1 through SMS OTP to the registered phone number; after OTP verification, the user can set a new password. SMS provider configuration is environment-specific and no provider secret is stored in Flutter.
 
 ### `profiles`
 
@@ -57,7 +57,7 @@ One row per authenticated user.
 | `account_status` | `account_status not null default 'ACTIVE'` |
 | `created_at`, `updated_at` | `timestamptz not null` |
 
-Constraints enforce unique normalized phone for every role, Worker registration starts `ACTIVE`, numeric Worker ID remains immutable operational data, and protected columns are not directly client-writable. A former Worker may retain `worker_number` after becoming Captain/Supervisor so history and references remain stable.
+Constraints enforce unique normalized phone for every role, Worker registration starts `ACTIVE`, numeric Worker ID remains immutable operational data, and protected columns are not directly client-writable. Worker registration requires age 18 or older on the registration date. A former Worker may retain `worker_number` after becoming Captain/Supervisor so history and references remain stable.
 
 ### `worker_profiles`
 
@@ -85,13 +85,29 @@ Append-only role changes: user, old/new role, actor, reason, selected Worker-cat
 
 Role/category transitions are atomic. Changing Worker to any non-Worker role sets current `worker_profiles.category` to null while preserving `last_worker_category` and history. Returning to Worker restores `last_worker_category` by default; Admin may select a different restoration category, which is explicitly audited.
 
+Revoking a directly provisioned staff-only Captain/Supervisor with no previous Worker profile must not implicitly create a Worker. The stored staff role is retained only as historical/admin identity metadata, `account_status` is set to `INACTIVE`, and inactive accounts have no operational privileges regardless of stored role. A later Worker conversion requires an explicit Admin/Super Admin onboarding operation with all required Worker profile data and starts at category `F` because there is no previous Worker category to restore.
+
+When an active Worker becomes Captain/Supervisor, current category is cleared and prior category/history remain preserved. Existing confirmed Worker assignments are retained and receive an Admin-resolution review flag when the assignment table exists. Active waitlist entries are automatically withdrawn without penalty when the waitlist table exists; historical waitlist records remain and are not restored automatically if the user later returns to Worker.
+
 ### `worker_category_history`
 
 Append-only category changes: worker, old category, new category, action (`PROMOTION`/`DEMOTION`/audited role-restoration override), actor ID, actor role snapshot, related event (nullable), mandatory reason, optional notes, timestamp. Normal V1 promotion/demotion changes exactly one step along `F<->C<->B<->A`; the current category changes in the same transaction. Category history remains when current category is null.
 
 ### `account_actions`
 
-Append-only account-state transitions: target user, old/new status, action type, reason, related event, actor ID/role snapshot, optional release time/manual-release flag, notes, timestamp. Only Super Admin/Admin can Detain or Release. Detention blocks future applications but does not cancel confirmed assignments; each retained assignment receives an Admin-resolution flag.
+Append-only account-state transitions: target user, old/new status, action type, reason, related event, actor ID/role snapshot, optional release time/manual-release flag, notes, timestamp. Only Super Admin/Admin can Detain or Release. Detention blocks future applications but does not cancel confirmed assignments; each retained assignment receives an Admin-resolution flag. Staff-only role revocation is also recorded here as `STAFF_ACCESS_REVOKED` with `new_status = INACTIVE`.
+
+### `phone_change_history`
+
+Append-only phone reassignment audit: target user, old normalized phone, new normalized phone, Admin/Super Admin actor, actor role snapshot, mandatory reason, and timestamp. Phone reassignment is not self-service. Workers, Captains, and Supervisors cannot directly change their authentication phone number. Admin/Super Admin functions update the existing Auth user and `profiles.phone_e164` in one transaction; they must not create a second account. Normal Admins may change Worker/Captain/Supervisor phone numbers only. Admin phone numbers may only be changed by Super Admin. Super Admin phone changes require an appropriately privileged controlled flow.
+
+### `password_recovery_challenges`
+
+Tracks recovery initiation metadata without storing provider secrets: user, registered phone, provider environment (`local`, `development`, or `production`), provider-managed OTP hash/reference, expiry, consumption time, attempt count, and timestamps. The trusted SMS provider integration sends OTP to the registered phone and may differ by environment.
+
+### Profile-photo storage
+
+Profile photos are stored in a private Supabase Storage bucket named `profile-photos`. Allowed source MIME types are `image/jpeg`, `image/png`, and `image/webp`; maximum source upload size is 5 MB. Flutter should crop/resize/compress toward about 1 MB where practical, but storage/server policy remains authoritative for MIME type, size, ownership, and path restrictions.
 
 ### Authorization invariants
 
@@ -128,7 +144,15 @@ Append-only account-state transitions: target user, old/new status, action type,
 | `created_at`, `updated_at` | `timestamptz not null` |
 | `version` | integer optimistic-concurrency revision |
 
-Constraints enforce `reporting_at <= work_starts_at < expected_ends_at`, `Asia/Kolkata`/INR V1 rules, valid lifecycle/recruitment combinations, and no silent capacity reduction below active confirmed assignments. Lifecycle and recruitment transitions are handled separately: for example, recruitment may be FULL while event lifecycle is PUBLISHED or UPCOMING.
+Constraints enforce `reporting_at <= work_starts_at < expected_ends_at`, `Asia/Kolkata`/INR V1 rules, and valid lifecycle/recruitment combinations. Lifecycle and recruitment transitions are handled separately: for example, recruitment may be FULL while event lifecycle is PUBLISHED or UPCOMING.
+
+Admin/Super Admin may increase capacity normally. Ordinary event edits may reduce capacity only when the new `required_worker_count` is greater than or equal to active confirmed assignments. If requested capacity is lower, the ordinary edit is rejected; workers are never automatically selected or removed. The later management-removal workflow must explicitly select assignment(s), require a reason, write immutable history/audit, notify affected workers, mark assignments management-removed rather than deleting them, and carry no worker reliability penalty.
+
+Event time edits may proceed while editable. When assignments exist, edits that create one-hour conflicts must be detected server-side, require explicit Admin/Super Admin confirmation, create `EVENT_TIME_CONFLICT` review flags with event/version/cause information, and never automatically cancel or prioritize either assignment.
+
+Lifecycle timing is fixed in V1: `DRAFT` is worker-invisible; manual publish sets `PUBLISHED`, or `UPCOMING` immediately if the event is published on its event date after `Asia/Kolkata` midnight; automatic processing sets `PUBLISHED -> UPCOMING` at local event-date midnight and `PUBLISHED/UPCOMING -> IN_PROGRESS` at `reporting_at`; `IN_PROGRESS -> COMPLETED` is manual; `COMPLETED -> CLOSED` is manual; `DRAFT/PUBLISHED/UPCOMING` may be cancelled; `IN_PROGRESS` supports emergency cancellation with mandatory reason; `CANCELLED` and `CLOSED` are terminal.
+
+Recruitment is independent: Phase 6 opens recruitment when the first tier becomes eligible; booking phases set FULL/OPEN from active confirmed counts; reporting time closes recruitment; cancellation forces recruitment `CLOSED`; completed/closed event lifecycle requires recruitment `CLOSED`; recruitment `CLOSED` is terminal in V1.
 
 ### `event_leaders`
 
@@ -199,7 +223,7 @@ Append-only history: assignment, event, worker, actor, actor role, cancellation 
 
 ### `assignment_review_flags`
 
-Admin-resolution queue for retained confirmed assignments. Stores assignment, flag type (`EVENT_TIME_CONFLICT` or `WORKER_DETAINED` initially), related assignment/event where applicable, detected time, cause/event version or account action, state, resolver, resolution notes, and resolution time. Event edits that create a one-hour conflict and detention after confirmation create flags; neither condition silently cancels an assignment.
+Admin-resolution queue for retained confirmed assignments. Stores assignment, flag type (`EVENT_TIME_CONFLICT`, `WORKER_DETAINED`, `WORKER_ROLE_CHANGED`, or `ROLE_CHANGED`), related assignment/event where applicable, detected time, cause/event version or account action, state, resolver, resolution notes, and resolution time. Event edits that create a one-hour conflict, detention after confirmation, and Worker-to-field-role changes create flags when the assignments table exists; none of these conditions silently cancels an assignment.
 
 ## Operations and quality
 
@@ -261,6 +285,10 @@ notifications 1---* notification_deliveries
 
 - Unique normalized phone for every Auth/application user; phone plus password is the only V1 login credential.
 - Unique numeric Worker ID, generated only by the database.
+- Worker registration rejects date of birth values that make the worker younger than 18 on the registration date.
+- Phone reassignment is never self-service, is audited, and updates the existing account instead of creating a duplicate. Admin may change Worker/Captain/Supervisor phones only; Admin phones require Super Admin; Super Admin phone changes require an appropriately privileged controlled flow.
+- Password recovery challenge metadata records the target environment while SMS provider secrets stay outside Flutter and outside exposed tables.
+- Profile photos live in a private bucket with JPEG/PNG/WebP and 5 MB source-upload restrictions.
 - Current `worker_profiles.category` is non-null exactly when active role is Worker; all new Workers start at F, role changes preserve `last_worker_category` and history.
 - One event/category release rule and non-decreasing offsets.
 - One-second final-seat arbitration windows use trusted server receipt times and deterministic category/time/UUID ordering.
@@ -290,6 +318,8 @@ No derived client read model is an authorization or mutation authority.
 - Reliability weighting and calculation policy must be finalized before Phase 13. The schema reserves versioned configuration/snapshots without selecting weights now.
 - Data retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident-response rules must be finalized before Phase 16 production hardening.
 - Other later-phase workflow details and their deadlines are tracked in `IMPLEMENTATION_PLAN.md`; none may be filled by an unreviewed schema assumption.
+
+Phase 4 role/account decisions are closed. Assignment-review flagging for existing confirmed assignments is integrated when `assignments` is created, and management role-change withdrawal of active waitlist rows is integrated when `waitlist_entries` is created. Those are implementation dependencies, not open business-rule decisions.
 
 ## Migration grouping
 

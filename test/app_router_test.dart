@@ -19,6 +19,25 @@ void main() {
       );
     });
 
+    test('allows unauthenticated users to open registration and recovery', () {
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: false,
+          role: null,
+          location: '/register',
+        ),
+        isNull,
+      );
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: false,
+          role: null,
+          location: '/recovery',
+        ),
+        isNull,
+      );
+    });
+
     test('sends authenticated workers to the worker shell', () {
       expect(
         roleAwareRedirect(
@@ -49,6 +68,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            authBootstrapEnabledProvider.overrideWithValue(false),
             appEnvironmentProvider.overrideWithValue(
               AppEnvironment.fromValues(
                 environment: 'local',

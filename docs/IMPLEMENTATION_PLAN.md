@@ -52,6 +52,10 @@ No phase should change a finalized business rule without an explicit blueprint r
 16. `event_status` is `DRAFT`, `PUBLISHED`, `UPCOMING`, `IN_PROGRESS`, `COMPLETED`, `CLOSED`, or `CANCELLED`; `recruitment_status` is `NOT_OPEN`, `OPEN`, `FULL`, or `CLOSED`.
 17. Reliability weighting is deferred, with a mandatory decision before Phase 13.
 18. Data-retention/privacy decisions are deferred, with a mandatory decision before Phase 16 production hardening.
+19. Password reset/recovery is included in V1 through SMS OTP to the registered phone number, followed by setting a new password after OTP verification. SMS provider configuration may differ by environment and provider secrets must never be bundled in Flutter.
+20. Phone-number reassignment is supported in V1 but is not self-service. Worker, Captain, and Supervisor phone numbers may be changed by Admin or Super Admin after manual identity verification. Admin phone numbers may only be changed by Super Admin. Super Admin phone changes require an appropriately privileged controlled flow. The old phone, new phone, actor, reason, and timestamp are audited; reassignment updates the existing account and must not create a second account.
+21. Worker registration requires the worker to be at least 18 years old on the registration date. This applies to Worker registration, not pre-provisioned administrative accounts.
+22. Profile photos allow only `image/jpeg`, `image/png`, and `image/webp`; source uploads are capped at 5 MB. Flutter crops/resizes/compresses toward about 1 MB where practical, while Supabase Storage/server-side policy rejects unsupported MIME types and oversized files. Profile photos are stored in a private Supabase Storage bucket.
 
 ## Planned Flutter architecture
 
@@ -144,25 +148,25 @@ Environment configuration must separate local, development, and production value
 
 **Files/components involved:** `features/auth/**`, `features/profile/**`, auth repository, phone normalization, staff-account provisioning flow, profile-photo storage adapter.
 
-**Database changes:** `profiles`, `worker_profiles`, role/account history, numeric Worker ID sequence, profile-completeness state, registration trigger/function, profile-photo bucket policies, identity/role-management RPCs.
+**Database changes:** `profiles`, `worker_profiles`, role/account/category/phone-change history, password-recovery challenge metadata, numeric Worker ID sequence, profile-completeness state, controlled worker-registration/staff-provisioning/role-change/phone-change/password-recovery RPCs, and private profile-photo bucket policies with 5 MB/MIME restrictions.
 
-**Tests:** Registration field validation; duplicate normalized-phone race; phone/password login for every role; generated Worker ID uniqueness and proof it cannot authenticate; F/ACTIVE defaults; incomplete-profile Apply gate; staff-role authority; category clear/restore on role change; forbidden role/category/account edits.
+**Tests:** Registration field validation; duplicate normalized-phone race; phone/password login for every role; generated Worker ID uniqueness and proof it cannot authenticate; F/ACTIVE defaults; under-18 Worker rejection; profile-photo MIME/size/private-storage enforcement; SMS OTP recovery environment recording; Admin/Super Admin phone reassignment audit and existing-account update; Admin-only denial for Admin/Super Admin target phones; incomplete-profile Apply gate; staff-role authority; category clear/restore on role change; forbidden role/category/account edits.
 
-**Completion criteria:** Every user signs in with unique phone plus password; a worker receives a non-login numeric reference ID and enters as F/ACTIVE; role/category transitions preserve history and restoration behavior; protected identity fields remain server-controlled.
+**Completion criteria:** Every user signs in with unique phone plus password; SMS OTP recovery can be initiated for the registered phone without bundling provider secrets; a worker receives a non-login numeric reference ID and enters as F/ACTIVE only after completing required fields, private profile photo, and the 18+ DOB check; Admin/Super Admin phone reassignment updates the existing account and is audited, while Admin cannot change Admin/Super Admin phones; role/category transitions preserve history and restoration behavior; protected identity fields remain server-controlled.
 
 **Dependencies:** Phases 1-2; any recovery/profile-validation details listed with a Phase 3 deadline.
 
 ### Phase 4 - Worker directory and account management
 
-**Objective:** Provide own-profile editing, global worker search/history for authorized staff, Admin-only detention/release, staff-role management, and flagged review of restricted workers' existing assignments.
+**Objective:** Provide own-profile editing, global worker search/history for authorized staff, Admin-only detention/release, staff-role management, finalized staff-only revocation behavior, and the review-flag contract for role/account changes that affect existing assignments.
 
 **Files/components involved:** `features/profile/**`, `features/workers/**`, shared search/filter controls, worker repository.
 
-**Database changes:** Controlled own-profile RPC; Super Admin/Admin role-management RPCs; Admin-only account-state RPC; account action/history records; assignment-review flags; indexed worker search fields.
+**Database changes:** Controlled own-profile RPC; Super Admin/Admin role-management RPCs; Admin-only account-state RPC; account action/history records; assignment-review flags with `WORKER_DETAINED`, `WORKER_ROLE_CHANGED`, `ROLE_CHANGED`, and `EVENT_TIME_CONFLICT` contract values; indexed worker search fields. Staff-only Captain/Supervisor revocation with no previous Worker profile sets `account_status = INACTIVE`, keeps the stored staff role as historical/admin metadata, audits the change, and requires explicit later Worker onboarding. Worker-to-Captain/Supervisor transitions clear the active Worker category, preserve the prior category, block future Worker applications by role, retain confirmed assignments for later Admin/Super Admin resolution, and withdraw active waitlist entries without penalty once the later assignment/waitlist tables exist.
 
-**Tests:** Allowed own-field updates; protected-field denial; Captain/Supervisor global worker/history reads; role creation/revocation authority; Admin-only detention/release; detention audit; future Apply blocked; existing assignments retained and flagged exactly once.
+**Tests:** Allowed own-field updates; protected-field denial; Captain/Supervisor global worker/history reads; role creation/revocation authority; staff-only revocation to `INACTIVE`; inactive retained staff role privilege denial; Worker-to-field role category clearing and operational-effects contract audit; Admin-only detention/release; detention audit; future Apply blocked by non-Worker/non-ACTIVE predicates once Apply exists. Assignment retention/flagging and active waitlist withdrawal integration tests are deferred to the phases that create `assignments` and `waitlist_entries`.
 
-**Completion criteria:** Workers maintain only permitted fields; field leaders can search all workers; role-management boundaries are enforced; detention never auto-cancels an assignment and always creates an Admin-visible resolution flag.
+**Completion criteria:** Workers maintain only permitted fields; field leaders can search all workers; role-management boundaries are enforced; staff-only revocation produces an inactive account with no operational privileges and no implicit Worker conversion; Worker-to-field role changes preserve Worker history and publish the later assignment/waitlist contract; detention never auto-cancels an assignment and the Phase 4 flag contract is ready for later assignment integration.
 
 **Dependencies:** Phase 3.
 
@@ -174,9 +178,9 @@ Environment configuration must separate local, development, and production value
 
 **Database changes:** `events` with separate `event_status` and `recruitment_status`, `event_leaders`, `event_requirements`, `event_allowances`, event audit/history; controlled event mutation RPCs; INR and timezone constraints.
 
-**Tests:** Required fields and time ordering in `Asia/Kolkata`; 12-hour client formatting; INR-only V1 money; independent lifecycle/recruitment transitions; multiple Captains/Supervisors; role validation; draft invisibility; publish/cancel authorization; capacity reduction guard; significant edit auditing.
+**Tests:** Required fields and time ordering in `Asia/Kolkata`; 12-hour client formatting; INR-only V1 money; independent lifecycle/recruitment transitions; multiple Captains/Supervisors; role validation; draft invisibility; publish/cancel authorization; significant edit auditing; same-day publish enters UPCOMING; reporting-time automation moves events to IN_PROGRESS and closes recruitment; manual completion/closure; in-progress emergency cancellation. Capacity-reduction and event-time conflict contracts are recorded now; full assignment/removal/notification integration tests remain deferred to the phases that create `assignments`, management removal, and notifications.
 
-**Completion criteria:** Admins can manage the complete blueprint event form; lifecycle and recruitment state cannot be conflated; workers cannot see drafts; cancellation and edits retain history.
+**Completion criteria:** Admins can manage the blueprint event draft/publish/cancel/complete/close foundation; lifecycle and recruitment state cannot be conflated; workers cannot see drafts; cancellation and edits retain history; the Phase 5 capacity-reduction, conflict-resolution, and lifecycle/recruitment decisions are closed and represented as enforceable current behavior or explicit later-phase contracts.
 
 **Dependencies:** Phases 2-4.
 
@@ -364,9 +368,26 @@ These decisions are normative and are listed in the Finalized decision register.
 
 ### Explicitly deferred with deadlines
 
-1. **Before Phase 3:** Decide whether password reset/recovery is included in V1, its recovery channel, phone-reassignment handling, minimum worker age if any, and photo file validation limits. These do not block Phases 1-2.
-2. **Before Phase 4:** Decide the destination role/account state when a staff-only Captain/Supervisor role is revoked and no previous Worker role exists, plus how a Worker-to-field-role change affects existing assignments and waitlist entries.
-3. **Before Phase 5:** Decide the explicit capacity-reduction/removal workflow, resolution rules for conflicts created by event time edits, and exact automatic/manual transition timing within the finalized split status model.
-4. **Before Phase 13:** Approve reliability weights, minimum-sample behavior, cancellation contribution, performance aggregation, and recompute timing. Reliability remains non-blocking for foundation and Phases 1-12.
-5. **Before Phase 14:** Approve reporting-reminder lead time and any configurable notification quiet-time behavior.
-6. **Before Phase 16:** Approve data retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident-response requirements. Production hardening cannot complete without these decisions.
+1. **Before Phase 13:** Approve reliability weights, minimum-sample behavior, cancellation contribution, performance aggregation, and recompute timing. Reliability remains non-blocking for foundation and Phases 1-12.
+2. **Before Phase 14:** Approve reporting-reminder lead time and any configurable notification quiet-time behavior.
+3. **Before Phase 16:** Approve data retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident-response requirements. Production hardening cannot complete without these decisions.
+
+### Closed for Phase 3
+
+The Phase 3 gate is closed: V1 includes SMS OTP password recovery to the registered phone; phone reassignment is not self-service and uses controlled Admin/Super Admin flows, with Admins unable to change Admin/Super Admin phones; Worker minimum age is 18; profile photos are private, restricted to JPEG/PNG/WebP, capped at 5 MB source upload, and compressed client-side toward about 1 MB where practical.
+
+### Closed for Phase 4
+
+The Phase 4 gate is closed. Revoking a directly provisioned staff-only Captain/Supervisor with no previous Worker profile sets `account_status = INACTIVE`, retains the stored Captain/Supervisor role only as historical/admin identity metadata, removes operational privileges because inactive accounts fail authorization helpers, and audits actor/reason/timestamp. Later Worker onboarding for that person must be explicit and starts at category `F` after the required Worker profile is completed. If the Captain/Supervisor previously came from Worker, revocation may return them to Worker and restore the previous Worker category.
+
+When a Worker becomes Captain/Supervisor, their active Worker category becomes null, previous category/history is preserved, new Worker applications are blocked by role, confirmed assignments are retained for Admin/Super Admin resolution with a `WORKER_ROLE_CHANGED`/`ROLE_CHANGED` review-flag contract, and active waitlist entries must be withdrawn without penalty by the later waitlist workflow. The Phase 4 implementation records the transition contract now; assignment and waitlist integration tests are deferred to the phases that introduce those tables.
+
+### Closed for Phase 5
+
+The Phase 5 gate is closed. Admin/Super Admin may increase event capacity normally. Ordinary event edits may reduce `required_worker_count` only to a value greater than or equal to the active confirmed assignment count. Reducing below confirmed count requires an explicit Admin/Super Admin management-removal workflow with selected assignment(s), mandatory reason, immutable history/audit, affected-worker notification, management-removed assignment status, and no worker reliability penalty. Phase 5 enforces the current zero-assignment case and records the assignment/removal integration contract for the later booking/removal phases.
+
+Admin/Super Admin may edit event times while editable. If the edit would create one-hour conflicts for confirmed workers, the server must detect affected assignments, require explicit conflict confirmation, save the edit only after confirmation, create `EVENT_TIME_CONFLICT` Admin-resolution flags, retain event/version/cause details, and avoid automatic priority or cancellation. Manual resolution is by changing event timing again or explicit management removal. Full conflict detection and notification integration are deferred until assignments/conflict predicates exist.
+
+Lifecycle is split from recruitment. `DRAFT` is manual and worker-invisible. Manual publish changes `DRAFT` to `PUBLISHED`, or immediately to `UPCOMING` if published on/after the event date at `Asia/Kolkata` midnight. Automated lifecycle processing changes `PUBLISHED` to `UPCOMING` at 00:00 on the event date and `PUBLISHED`/`UPCOMING` to `IN_PROGRESS` at `reporting_at`. `IN_PROGRESS` completes only by manual Admin/Super Admin action; `COMPLETED` closes only by manual finalization. `DRAFT`, `PUBLISHED`, and `UPCOMING` may be cancelled; `IN_PROGRESS` supports emergency cancellation with mandatory reason. `CANCELLED` and `CLOSED` are terminal.
+
+Recruitment remains separate: `NOT_OPEN` means no tier is open; Phase 6 owns automatic `NOT_OPEN -> OPEN` when the first tier becomes eligible. Booking phases own `OPEN -> FULL` and `FULL -> OPEN` from active confirmed counts. Reporting time automatically closes `NOT_OPEN`, `OPEN`, or `FULL`; cancellation also forces `CLOSED`; `COMPLETED` and `CLOSED` lifecycle require recruitment `CLOSED`; recruitment `CLOSED` is terminal in V1.

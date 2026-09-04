@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../auth/application/auth_session.dart';
 
@@ -25,6 +26,27 @@ class RoleHomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text('Workspace shell ready'),
+                const SizedBox(height: 24),
+                if (role == AppRole.worker)
+                  FilledButton.icon(
+                    onPressed: () => context.go('/worker/profile'),
+                    icon: const Icon(Icons.person),
+                    label: const Text('Profile'),
+                  ),
+                if (role.canBrowseWorkers)
+                  FilledButton.icon(
+                    onPressed: () => context.go('${role.homePath}/workers'),
+                    icon: const Icon(Icons.groups),
+                    label: const Text('Workers'),
+                  ),
+                if (role == AppRole.admin || role == AppRole.superAdmin) ...[
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => context.go('${role.homePath}/events'),
+                    icon: const Icon(Icons.event),
+                    label: const Text('Events'),
+                  ),
+                ],
               ],
             ),
           ),

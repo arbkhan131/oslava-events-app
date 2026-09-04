@@ -36,7 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^3.4.3
   go_router: ^18.0.1
-
+  supabase_flutter: ^2.17.2
+  image: ^4.9.2
+  image_picker: ^1.2.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

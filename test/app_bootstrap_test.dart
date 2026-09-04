@@ -9,6 +9,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          authBootstrapEnabledProvider.overrideWithValue(false),
           appEnvironmentProvider.overrideWithValue(
             AppEnvironment.fromValues(
               environment: 'local',
@@ -31,6 +32,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          authBootstrapEnabledProvider.overrideWithValue(false),
           appEnvironmentProvider.overrideWithValue(
             AppEnvironment.fromValues(
               environment: 'development',
