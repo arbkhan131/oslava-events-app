@@ -6,6 +6,8 @@ import '../../features/auth/application/auth_session.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/password_recovery_screen.dart';
 import '../../features/auth/presentation/worker_registration_screen.dart';
+import '../../features/attendance/presentation/attendance_roster_screen.dart';
+import '../../features/attendance/presentation/field_event_list_screen.dart';
 import '../../features/events/presentation/admin_event_detail_screen.dart';
 import '../../features/events/presentation/admin_event_form_screen.dart';
 import '../../features/events/presentation/admin_event_list_screen.dart';
@@ -67,6 +69,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const WorkerMyWorkScreen(),
       ),
       GoRoute(
+        path: '/captain/events',
+        builder: (context, state) =>
+            const FieldEventListScreen(basePath: '/captain'),
+      ),
+      GoRoute(
+        path: '/captain/events/:id',
+        builder: (context, state) => AttendanceRosterScreen(
+          eventId: state.pathParameters['id']!,
+          basePath: '/captain',
+        ),
+      ),
+      GoRoute(
         path: '/captain/workers',
         builder: (context, state) =>
             const WorkerDirectoryScreen(role: AppRole.captain),
@@ -76,6 +90,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => WorkerDetailScreen(
           userId: state.pathParameters['id']!,
           viewerRole: AppRole.captain,
+        ),
+      ),
+      GoRoute(
+        path: '/supervisor/events',
+        builder: (context, state) =>
+            const FieldEventListScreen(basePath: '/supervisor'),
+      ),
+      GoRoute(
+        path: '/supervisor/events/:id',
+        builder: (context, state) => AttendanceRosterScreen(
+          eventId: state.pathParameters['id']!,
+          basePath: '/supervisor',
         ),
       ),
       GoRoute(
@@ -114,8 +140,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/admin/events/:id',
-        builder: (context, state) =>
-            AdminEventDetailScreen(eventId: state.pathParameters['id']!),
+        builder: (context, state) => AdminEventDetailScreen(
+          eventId: state.pathParameters['id']!,
+          basePath: '/admin',
+        ),
+      ),
+      GoRoute(
+        path: '/admin/events/:id/attendance',
+        builder: (context, state) => AttendanceRosterScreen(
+          eventId: state.pathParameters['id']!,
+          basePath: '/admin',
+        ),
       ),
       GoRoute(
         path: '/super-admin/workers',
@@ -141,8 +176,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/super-admin/events/:id',
-        builder: (context, state) =>
-            AdminEventDetailScreen(eventId: state.pathParameters['id']!),
+        builder: (context, state) => AdminEventDetailScreen(
+          eventId: state.pathParameters['id']!,
+          basePath: '/super-admin',
+        ),
+      ),
+      GoRoute(
+        path: '/super-admin/events/:id/attendance',
+        builder: (context, state) => AttendanceRosterScreen(
+          eventId: state.pathParameters['id']!,
+          basePath: '/super-admin',
+        ),
       ),
     ],
   );

@@ -52,6 +52,14 @@ class RoleHomeScreen extends StatelessWidget {
                     icon: const Icon(Icons.groups),
                     label: const Text('Workers'),
                   ),
+                if (role == AppRole.captain || role == AppRole.supervisor) ...[
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => context.go('${role.homePath}/events'),
+                    icon: const Icon(Icons.fact_check),
+                    label: const Text('Events'),
+                  ),
+                ],
                 if (role == AppRole.admin || role == AppRole.superAdmin) ...[
                   const SizedBox(height: 8),
                   FilledButton.icon(

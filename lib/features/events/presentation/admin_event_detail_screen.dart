@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import 'admin_event_list_screen.dart';
 
 class AdminEventDetailScreen extends ConsumerWidget {
-  const AdminEventDetailScreen({required this.eventId, super.key});
+  const AdminEventDetailScreen({
+    required this.eventId,
+    required this.basePath,
+    super.key,
+  });
 
   final String eventId;
+  final String basePath;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -51,6 +57,12 @@ class AdminEventDetailScreen extends ConsumerWidget {
                           : null,
                       icon: const Icon(Icons.publish),
                       label: const Text('Publish'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          context.go('$basePath/events/${event.id}/attendance'),
+                      icon: const Icon(Icons.fact_check),
+                      label: const Text('Attendance'),
                     ),
                     OutlinedButton.icon(
                       onPressed:
