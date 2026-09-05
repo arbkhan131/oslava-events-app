@@ -138,14 +138,9 @@ Database uniqueness and capacity tests are the final backstop. A displayed vacan
 
 ### Cross-tier final-seat arbitration
 
-The blueprint requires higher category to beat a lower category when simultaneous requests compete for the final seat, but does not define "simultaneous." A normal row lock alone gives the seat to lock acquisition order and cannot guarantee category priority.
+The finalized Phase 9 rule treats final-seat requests received within the same one-second arbitration window as competing. The server stores pending `booking_requests`, waits for the window to close, then allocates by category rank A>B>C>F, earliest trusted `server_received_at` inside the same category, then request UUID only as a deterministic final tie-breaker.
 
-The technical design therefore requires one approved option before implementation:
-
-- A small server-side arbitration window that stores pending `booking_requests`, then allocates by category rank, request time, and ID.
-- A precise business definition that treats transaction/lock order as non-simultaneous except requests already queued before allocation.
-
-No arbitrary window is selected in this document. Once approved, the allocator must order A>B>C>F, then earliest request within category, and tests must prove the behavior.
+Requests outside the active one-second window do not compete with that window. Losing valid contenders receive `WAITLIST_AVAILABLE`; they are not automatically waitlisted.
 
 ## Waitlist functions
 

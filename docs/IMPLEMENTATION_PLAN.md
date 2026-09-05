@@ -232,11 +232,11 @@ Environment configuration must separate local, development, and production value
 
 **Files/components involved:** `features/booking/**`, Apply state/result UI, controlled booking RPC, realtime event counters.
 
-**Database changes:** `booking_requests`, one-second `booking_arbitration_windows`, `assignments`, requirement acknowledgements, `apply_for_event`, capacity/recruitment-status update logic, uniqueness constraints.
+**Database changes:** `booking_requests`, one-second `booking_arbitration_windows`, requirement acknowledgements, `apply_for_event`, capacity/recruitment-status update logic, uniqueness constraints, and assignment creation through the controlled booking path.
 
 **Tests:** Each rejection/result code; duplicate taps; required-profile/photo completeness; requests inside/outside the one-second window; A>B>C>F ordering; earliest server receipt within one category; capacity invariant under load; rollback on failure.
 
-**Completion criteria:** Confirmed assignments never exceed target; Apply is idempotent; incomplete profiles cannot Apply; the final-seat decision waits for the one-second window to close and passes concurrent category/time priority tests.
+**Completion criteria:** Confirmed assignments never exceed target; Apply is idempotent; incomplete profiles cannot Apply; the final-seat decision waits for the one-second window to close and passes category/time priority tests; losing full-capacity requests return `WAITLIST_AVAILABLE` without auto-enrollment.
 
 **Dependencies:** Phases 6-8.
 

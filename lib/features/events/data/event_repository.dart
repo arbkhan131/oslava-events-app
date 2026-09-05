@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/bootstrap.dart';
+import '../../booking/domain/booking_application_result.dart';
 import '../domain/event_summary.dart';
 import '../domain/worker_event.dart';
 
@@ -15,6 +16,13 @@ abstract interface class EventRepository {
   Future<List<WorkerEvent>> loadWorkerEvents();
 
   Future<WorkerEvent?> loadWorkerEventDetail(String eventId);
+
+  Future<BookingApplicationResult> applyForEvent({
+    required String eventId,
+    required String idempotencyKey,
+    List<String> acknowledgedRequirementIds = const [],
+    bool lateCancellationAcknowledged = false,
+  });
 
   Future<String> createDraft(EventDraftInput input);
 
@@ -63,6 +71,28 @@ class SupabaseEventRepository implements EventRepository {
       return null;
     }
     return WorkerEvent.fromJson(Map<String, dynamic>.from(rows.first as Map));
+  }
+
+  @override
+  Future<BookingApplicationResult> applyForEvent({
+    required String eventId,
+    required String idempotencyKey,
+    List<String> acknowledgedRequirementIds = const [],
+    bool lateCancellationAcknowledged = false,
+  }) async {
+    final response = await _client.rpc(
+      'apply_for_event',
+      params: {
+        'p_event_id': eventId,
+        'p_idempotency_key': idempotencyKey,
+        'p_acknowledged_requirement_ids': acknowledgedRequirementIds,
+        'p_late_cancellation_acknowledged': lateCancellationAcknowledged,
+      },
+    );
+    final rows = response as List<dynamic>;
+    return BookingApplicationResult.fromJson(
+      Map<String, dynamic>.from(rows.first as Map),
+    );
   }
 
   @override

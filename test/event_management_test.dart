@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oslava_events/app/router/app_router.dart';
 import 'package:oslava_events/features/auth/application/auth_session.dart';
+import 'package:oslava_events/features/booking/domain/booking_application_result.dart';
 import 'package:oslava_events/features/events/domain/event_summary.dart';
 import 'package:oslava_events/features/events/domain/worker_event.dart';
 
@@ -242,6 +243,53 @@ void main() {
           location: '/worker/work',
         ),
         isNull,
+      );
+    });
+  });
+
+  group('Phase 9 booking results', () {
+    test('parses confirmed apply result', () {
+      final result = BookingApplicationResult.fromJson({
+        'booking_request_id': 'request-id',
+        'result': 'CONFIRMED',
+        'result_detail_code': null,
+        'assignment_id': 'assignment-id',
+        'event_id': 'event-id',
+        'vacancy_count': 0,
+      });
+
+      expect(result.status, BookingResultStatus.confirmed);
+      expect(result.isConfirmed, isTrue);
+      expect(bookingResultMessage(result), 'Application confirmed.');
+    });
+
+    test('maps server rejection details to worker messages', () {
+      final incomplete = BookingApplicationResult.fromJson({
+        'booking_request_id': 'request-id',
+        'result': 'RESTRICTED',
+        'result_detail_code': 'PROFILE_INCOMPLETE',
+        'assignment_id': null,
+        'event_id': 'event-id',
+        'vacancy_count': 3,
+      });
+
+      expect(
+        bookingResultMessage(incomplete),
+        'Complete your profile before applying.',
+      );
+
+      final full = BookingApplicationResult.fromJson({
+        'booking_request_id': 'request-id',
+        'result': 'WAITLIST_AVAILABLE',
+        'result_detail_code': 'FULL',
+        'assignment_id': null,
+        'event_id': 'event-id',
+        'vacancy_count': 0,
+      });
+
+      expect(
+        bookingResultMessage(full),
+        'Event is full. Join Waitlist is available.',
       );
     });
   });

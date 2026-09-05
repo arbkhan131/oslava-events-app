@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../booking/domain/booking_application_result.dart';
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import '../domain/worker_event.dart';
+import 'worker_event_list_screen.dart';
 
 final workerEventDetailProvider = FutureProvider.family<WorkerEvent?, String>((
   ref,
@@ -83,7 +85,9 @@ class WorkerEventDetailScreen extends ConsumerWidget {
                   _InfoRow(label: 'Dress code', value: value.dressCode!),
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: null,
+                  onPressed: value.canApply
+                      ? () => _apply(context, ref, value.id)
+                      : null,
                   icon: const Icon(Icons.send),
                   label: const Text('Apply'),
                 ),
@@ -101,6 +105,27 @@ class WorkerEventDetailScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _apply(
+    BuildContext context,
+    WidgetRef ref,
+    String eventId,
+  ) async {
+    final idempotencyKey =
+        'apply-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    final result = await ref
+        .read(eventRepositoryProvider)
+        .applyForEvent(eventId: eventId, idempotencyKey: idempotencyKey);
+
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(bookingResultMessage(result))));
+    ref.invalidate(workerEventDetailProvider(eventId));
+    ref.invalidate(workerEventsProvider);
   }
 }
 
