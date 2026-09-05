@@ -27,12 +27,25 @@ class RoleHomeScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 const Text('Workspace shell ready'),
                 const SizedBox(height: 24),
-                if (role == AppRole.worker)
+                if (role == AppRole.worker) ...[
                   FilledButton.icon(
                     onPressed: () => context.go('/worker/profile'),
                     icon: const Icon(Icons.person),
                     label: const Text('Profile'),
                   ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => context.go('/worker/events'),
+                    icon: const Icon(Icons.event_available),
+                    label: const Text('Events'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => context.go('/worker/work'),
+                    icon: const Icon(Icons.work),
+                    label: const Text('My Work'),
+                  ),
+                ],
                 if (role.canBrowseWorkers)
                   FilledButton.icon(
                     onPressed: () => context.go('${role.homePath}/workers'),

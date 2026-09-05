@@ -303,7 +303,7 @@ notifications 1---* notification_deliveries
 
 Prefer security-invoker views or read RPCs for:
 
-- Worker event board state derived from separate event lifecycle and recruitment status: Available, Locked, Full, Confirmed, Completed, Cancelled.
+- Worker event board/detail state derived from separate event lifecycle, recruitment status, tier release rules, and server-side vacancy counts: Available, Locked, Full, Completed, Cancelled, and Closed are available in Phase 7; Confirmed becomes populated from `assignments` in the booking phases.
 - Event confirmed/vacancy and attendance counters.
 - Worker own work/history summary.
 - Admin dashboard event/category counts.

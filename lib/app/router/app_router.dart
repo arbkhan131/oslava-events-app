@@ -9,6 +9,9 @@ import '../../features/auth/presentation/worker_registration_screen.dart';
 import '../../features/events/presentation/admin_event_detail_screen.dart';
 import '../../features/events/presentation/admin_event_form_screen.dart';
 import '../../features/events/presentation/admin_event_list_screen.dart';
+import '../../features/events/presentation/worker_event_detail_screen.dart';
+import '../../features/events/presentation/worker_event_list_screen.dart';
+import '../../features/events/presentation/worker_my_work_screen.dart';
 import '../../features/shell/presentation/role_home_screen.dart';
 import '../../features/workers/presentation/edit_worker_profile_screen.dart';
 import '../../features/workers/presentation/worker_detail_screen.dart';
@@ -49,6 +52,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/worker/profile/edit',
         builder: (context, state) => const EditWorkerProfileScreen(),
+      ),
+      GoRoute(
+        path: '/worker/events',
+        builder: (context, state) => const WorkerEventListScreen(),
+      ),
+      GoRoute(
+        path: '/worker/events/:id',
+        builder: (context, state) =>
+            WorkerEventDetailScreen(eventId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/worker/work',
+        builder: (context, state) => const WorkerMyWorkScreen(),
       ),
       GoRoute(
         path: '/captain/workers',

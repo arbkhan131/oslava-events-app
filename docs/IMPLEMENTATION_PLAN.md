@@ -206,9 +206,9 @@ Environment configuration must separate local, development, and production value
 
 **Database changes:** Security-invoker read views or stable read RPCs for worker-visible events, vacancy counts, tier state, and own assignment summary.
 
-**Tests:** Category-specific board states; locked detail visibility; no draft leakage; independent event/recruitment status rendering; Full event shows explicit Join Waitlist and never auto-enrolls; confirmed-only leader contact; `Asia/Kolkata` 12-hour countdown/display boundaries.
+**Tests:** Category-specific board states; locked detail visibility; no draft leakage; independent event/recruitment status rendering; Full event shows explicit Join Waitlist and never auto-enrolls; `Asia/Kolkata` 12-hour countdown/display boundaries. Confirmed-only leader contact and populated My Work assignment states remain deferred until `assignments` exists.
 
-**Completion criteria:** Workers see full event information and the correct server-derived action state; Full presents explicit waitlist opt-in; no client-side eligibility or lifecycle inference controls a mutation.
+**Completion criteria:** Workers see full event information and the correct server-derived discovery action state; Full presents explicit waitlist opt-in as a read-state contract; no client-side eligibility or lifecycle inference controls a mutation. Confirmed and My Work data integration is recorded for the assignment phases.
 
 **Dependencies:** Phases 3, 5-6.
 

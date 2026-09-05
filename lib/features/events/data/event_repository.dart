@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/bootstrap.dart';
 import '../domain/event_summary.dart';
+import '../domain/worker_event.dart';
 
 final eventRepositoryProvider = Provider<EventRepository>(
   (ref) => SupabaseEventRepository(ref.watch(supabaseClientProvider)),
@@ -10,6 +11,10 @@ final eventRepositoryProvider = Provider<EventRepository>(
 
 abstract interface class EventRepository {
   Future<List<EventSummary>> loadAdminEvents();
+
+  Future<List<WorkerEvent>> loadWorkerEvents();
+
+  Future<WorkerEvent?> loadWorkerEventDetail(String eventId);
 
   Future<String> createDraft(EventDraftInput input);
 
@@ -35,6 +40,29 @@ class SupabaseEventRepository implements EventRepository {
           (row) => EventSummary.fromJson(Map<String, dynamic>.from(row as Map)),
         )
         .toList();
+  }
+
+  @override
+  Future<List<WorkerEvent>> loadWorkerEvents() async {
+    final response = await _client.rpc('worker_event_board');
+    return (response as List<dynamic>)
+        .map(
+          (row) => WorkerEvent.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+  }
+
+  @override
+  Future<WorkerEvent?> loadWorkerEventDetail(String eventId) async {
+    final response = await _client.rpc(
+      'worker_event_detail',
+      params: {'p_event_id': eventId},
+    );
+    final rows = response as List<dynamic>;
+    if (rows.isEmpty) {
+      return null;
+    }
+    return WorkerEvent.fromJson(Map<String, dynamic>.from(rows.first as Map));
   }
 
   @override
