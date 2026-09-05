@@ -68,6 +68,7 @@ class _ActionChip extends StatelessWidget {
       WorkerEventActionState.full => colors.tertiary,
       WorkerEventActionState.locked => colors.outline,
       WorkerEventActionState.confirmed => colors.secondary,
+      WorkerEventActionState.waitlisted => colors.tertiary,
       WorkerEventActionState.completed => colors.outline,
       WorkerEventActionState.cancelled => colors.error,
       WorkerEventActionState.closed => colors.outline,

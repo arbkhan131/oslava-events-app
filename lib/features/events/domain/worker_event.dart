@@ -5,6 +5,7 @@ enum WorkerEventActionState {
   locked,
   full,
   confirmed,
+  waitlisted,
   completed,
   cancelled,
   closed;
@@ -19,6 +20,8 @@ enum WorkerEventActionState {
         return WorkerEventActionState.full;
       case 'CONFIRMED':
         return WorkerEventActionState.confirmed;
+      case 'WAITLISTED':
+        return WorkerEventActionState.waitlisted;
       case 'COMPLETED':
         return WorkerEventActionState.completed;
       case 'CANCELLED':

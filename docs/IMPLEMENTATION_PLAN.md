@@ -250,7 +250,7 @@ Environment configuration must separate local, development, and production value
 
 **Tests:** Before/at/after deadline; late booking accepted only after warning acknowledgement; no automatic waitlist insertion; duplicate Join protection; penalty-free withdrawal before promotion; normal cancellation after promotion; A>B>C>F ordering; same-tier join-time ordering; revalidation skip; simultaneous cancel/refill; promoted-worker notification record.
 
-**Completion criteria:** Workers enter the waitlist only by explicit action, may leave without penalty before promotion, and use normal cancellation after promotion; refill occurs once and never promotes an invalid/restricted/conflicting worker.
+**Completion criteria:** Workers enter the waitlist only by explicit action, may leave without penalty before promotion, and use normal cancellation after promotion; refill occurs once per vacancy and never promotes an invalid/restricted/conflicting worker; successful cancellations are idempotent and use the authoritative one-hour deadline.
 
 **Dependencies:** Phase 9.
 

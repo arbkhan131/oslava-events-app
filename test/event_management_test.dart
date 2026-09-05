@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:oslava_events/app/router/app_router.dart';
 import 'package:oslava_events/features/auth/application/auth_session.dart';
 import 'package:oslava_events/features/booking/domain/booking_application_result.dart';
+import 'package:oslava_events/features/booking/domain/waitlist_result.dart';
+import 'package:oslava_events/features/booking/domain/worker_assignment.dart';
 import 'package:oslava_events/features/events/domain/event_summary.dart';
 import 'package:oslava_events/features/events/domain/worker_event.dart';
 
@@ -219,6 +221,33 @@ void main() {
       expect(event.canJoinWaitlist, isTrue);
     });
 
+    test('waitlisted worker event parses server state', () {
+      final event = WorkerEvent.fromJson({
+        'id': 'event-id',
+        'title': 'Waitlisted Event',
+        'event_type': 'Concert',
+        'venue_name': 'Oslava Grounds',
+        'event_date': '2026-10-10',
+        'reporting_at': '2026-10-10T09:30:00Z',
+        'work_starts_at': '2026-10-10T10:30:00Z',
+        'expected_ends_at': '2026-10-10T18:30:00Z',
+        'required_worker_count': 25,
+        'active_confirmed_count': 25,
+        'vacancy_count': 0,
+        'daily_wage': 1200,
+        'currency_code': 'INR',
+        'event_status': 'PUBLISHED',
+        'recruitment_status': 'FULL',
+        'tier_strategy': 'STANDARD',
+        'open_categories': ['A', 'B', 'C', 'F'],
+        'action_state': 'WAITLISTED',
+        'action_label': 'Waitlisted',
+      });
+
+      expect(event.actionState, WorkerEventActionState.waitlisted);
+      expect(event.canJoinWaitlist, isFalse);
+    });
+
     test('Worker can open event board, detail, and My Work routes', () {
       expect(
         roleAwareRedirect(
@@ -291,6 +320,53 @@ void main() {
         bookingResultMessage(full),
         'Event is full. Join Waitlist is available.',
       );
+    });
+  });
+
+  group('Phase 10 cancellation and waitlist models', () {
+    test('parses waitlist join result and message', () {
+      final result = WaitlistResult.fromJson({
+        'waitlist_entry_id': 'waitlist-id',
+        'status': 'WAITING',
+        'result_detail_code': null,
+        'queue_position': 2,
+      });
+
+      expect(result.status, WaitlistEntryStatus.waiting);
+      expect(waitlistResultMessage(result), 'Waitlist joined. Position 2.');
+    });
+
+    test('parses worker assignment cancellation state', () {
+      final assignment = WorkerAssignment.fromJson({
+        'assignment_id': 'assignment-id',
+        'event_id': 'event-id',
+        'title': 'Confirmed Event',
+        'venue_name': 'Oslava Grounds',
+        'reporting_at': '2026-10-10T09:30:00Z',
+        'expected_ends_at': '2026-10-10T18:30:00Z',
+        'assignment_status': 'CONFIRMED',
+        'cancellation_deadline_at': '2026-10-10T08:30:00Z',
+        'can_cancel': true,
+      });
+
+      expect(assignment.status, AssignmentStatus.confirmed);
+      expect(assignment.canCancel, isTrue);
+      expect(assignment.reportingLabel, '10/10/2026 3:00 PM');
+    });
+
+    test('parses cancellation result', () {
+      final result = CancellationResult.fromJson({
+        'cancellation_id': 'cancel-id',
+        'assignment_id': 'assignment-id',
+        'event_id': 'event-id',
+        'status': 'CANCELLED',
+        'promoted_assignment_id': 'promoted-id',
+        'recruitment_status': 'FULL',
+      });
+
+      expect(result.status, AssignmentStatus.cancelled);
+      expect(result.promotedAssignmentId, 'promoted-id');
+      expect(result.recruitmentStatus, RecruitmentStatus.full);
     });
   });
 }

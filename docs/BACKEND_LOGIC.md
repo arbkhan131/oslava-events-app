@@ -167,7 +167,7 @@ Multiple refill workers must serialize on the same event lock or advisory key.
 
 ### `withdraw_waitlist`
 
-Requires a Phase 0 decision on worker withdrawal rights/deadline. It must never cancel a promoted assignment; after promotion, normal cancellation rules apply.
+Workers may withdraw a `WAITING` entry without penalty. A `PROMOTED` waitlist entry cannot be withdrawn; after promotion, normal assignment cancellation rules apply.
 
 ## Cancellation functions
 

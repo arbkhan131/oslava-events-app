@@ -134,7 +134,7 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | Phase 7 | Worker-visible pieces of AT-014, AT-015, and AT-045. Confirmed assignment/My Work population and waitlist mutations remain deferred to the assignment, booking, and waitlist phases. |
 | Phase 8 | AT-023 and executable AT-024 event-time conflict confirmation/flag coverage. Assignment removal and worker-facing resolution UX remain deferred to the management-removal/cancellation phases. |
 | Phase 9 | AT-017 to AT-022, plus Apply-side AT-018/AT-023 revalidation and capacity invariants. Explicit waitlist insertion remains Phase 10. |
-| Phase 10 | AT-025 to AT-032 |
+| Phase 10 | AT-025 to AT-032, including explicit waitlist opt-in, no automatic enrollment, penalty-free waiting withdrawal, promoted-entry cancellation handoff, and refill revalidation. |
 | Phase 11 | AT-035 to AT-037 |
 | Phase 12 | AT-038 to AT-040 |
 | Phase 13 | AT-041 after weighting is approved |

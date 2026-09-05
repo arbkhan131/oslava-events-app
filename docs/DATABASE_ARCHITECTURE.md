@@ -215,11 +215,11 @@ Use a partial unique index for one active confirmed assignment per `(event_id, w
 
 ### `waitlist_entries`
 
-Event, worker, status, joined timestamp, category-at-join snapshot, current priority metadata, originating booking request (nullable reference only), promoted assignment, withdrawal timestamp, skip reason, and timestamps. One active waiting entry per worker/event. Rows are created only by explicit Join Waitlist action after recruitment is FULL. Promotion order uses the worker's current category at promotion, then original valid join time; the snapshot remains for audit. A worker may withdraw while WAITING without penalty. After PROMOTED, withdrawal is unavailable and assignment cancellation rules apply.
+Event, worker, status, joined timestamp, category-at-join snapshot, current priority metadata, originating booking request (nullable reference only), promoted assignment, withdrawal timestamp, skip reason, penalty flag, and timestamps. One active waiting entry per worker/event. Rows are created only by explicit Join Waitlist action after recruitment is FULL. Promotion order uses the worker's current category at promotion, then original valid join time; the snapshot remains for audit. A worker may withdraw while WAITING without penalty. After PROMOTED, withdrawal is unavailable and assignment cancellation rules apply.
 
 ### `cancellations`
 
-Append-only history: assignment, event, worker, actor, actor role, cancellation type (`WORKER`, `MANAGEMENT`, `EVENT`), reason, requested timestamp, deadline snapshot, whether within deadline, and refill result. Worker cancellation after the deadline is rejected and should be recorded as an audit event/attempt only if that retention is approved.
+Append-only history: assignment, event, worker, actor, actor role, cancellation type (`WORKER`, `MANAGEMENT`, `EVENT`), reason, idempotency key, requested timestamp, deadline snapshot, whether within deadline, promoted assignment if refill succeeds, and refill result. Worker cancellation after the deadline is rejected; production retention of rejected attempts remains a hardening/audit policy decision.
 
 ### `assignment_review_flags`
 

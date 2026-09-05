@@ -133,6 +133,7 @@ For `worker_category_history`, `account_actions`, and `role_history`:
 - Admin/Super Admin reads all event entries.
 - Captain/Supervisor reads waitlist only if operationally required for assigned events.
 - Join, withdraw, skip, and promote happen only through RPCs.
+- Apply never creates waitlist rows automatically; explicit Join Waitlist is required.
 
 ### `cancellations` and `assignment_conflict_flags`
 
@@ -140,6 +141,7 @@ For `worker_category_history`, `account_actions`, and `role_history`:
 - Assigned leaders read affected assigned-event records if required.
 - Admin/Super Admin reads and resolves all.
 - Writes are function-only and append-only except controlled conflict resolution state.
+- Worker cancellation uses `cancel_assignment`, rejects after `reporting_at - 1 hour`, and writes successful cancellation history with refill results.
 
 ### `attendance`
 

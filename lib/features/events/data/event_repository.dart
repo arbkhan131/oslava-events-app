@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/bootstrap.dart';
 import '../../booking/domain/booking_application_result.dart';
+import '../../booking/domain/waitlist_result.dart';
+import '../../booking/domain/worker_assignment.dart';
 import '../domain/event_summary.dart';
 import '../domain/worker_event.dart';
 
@@ -22,6 +24,20 @@ abstract interface class EventRepository {
     required String idempotencyKey,
     List<String> acknowledgedRequirementIds = const [],
     bool lateCancellationAcknowledged = false,
+  });
+
+  Future<WaitlistResult> joinWaitlist({
+    required String eventId,
+    required String idempotencyKey,
+    List<String> acknowledgedRequirementIds = const [],
+  });
+
+  Future<List<WorkerAssignment>> loadWorkerAssignments();
+
+  Future<CancellationResult> cancelAssignment({
+    required String assignmentId,
+    required String reason,
+    required String idempotencyKey,
   });
 
   Future<String> createDraft(EventDraftInput input);
@@ -91,6 +107,57 @@ class SupabaseEventRepository implements EventRepository {
     );
     final rows = response as List<dynamic>;
     return BookingApplicationResult.fromJson(
+      Map<String, dynamic>.from(rows.first as Map),
+    );
+  }
+
+  @override
+  Future<WaitlistResult> joinWaitlist({
+    required String eventId,
+    required String idempotencyKey,
+    List<String> acknowledgedRequirementIds = const [],
+  }) async {
+    final response = await _client.rpc(
+      'join_waitlist',
+      params: {
+        'p_event_id': eventId,
+        'p_idempotency_key': idempotencyKey,
+        'p_acknowledged_requirement_ids': acknowledgedRequirementIds,
+      },
+    );
+    final rows = response as List<dynamic>;
+    return WaitlistResult.fromJson(
+      Map<String, dynamic>.from(rows.first as Map),
+    );
+  }
+
+  @override
+  Future<List<WorkerAssignment>> loadWorkerAssignments() async {
+    final response = await _client.rpc('worker_my_work');
+    return (response as List<dynamic>)
+        .map(
+          (row) =>
+              WorkerAssignment.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+  }
+
+  @override
+  Future<CancellationResult> cancelAssignment({
+    required String assignmentId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final response = await _client.rpc(
+      'cancel_assignment',
+      params: {
+        'p_assignment_id': assignmentId,
+        'p_reason': reason,
+        'p_idempotency_key': idempotencyKey,
+      },
+    );
+    final rows = response as List<dynamic>;
+    return CancellationResult.fromJson(
       Map<String, dynamic>.from(rows.first as Map),
     );
   }

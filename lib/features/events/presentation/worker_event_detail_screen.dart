@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../booking/domain/booking_application_result.dart';
+import '../../booking/domain/waitlist_result.dart';
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import '../domain/worker_event.dart';
@@ -93,7 +94,9 @@ class WorkerEventDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: null,
+                  onPressed: value.canJoinWaitlist
+                      ? () => _joinWaitlist(context, ref, value.id)
+                      : null,
                   icon: const Icon(Icons.playlist_add),
                   label: const Text('Join Waitlist'),
                 ),
@@ -124,6 +127,27 @@ class WorkerEventDetailScreen extends ConsumerWidget {
 
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(bookingResultMessage(result))));
+    ref.invalidate(workerEventDetailProvider(eventId));
+    ref.invalidate(workerEventsProvider);
+  }
+
+  Future<void> _joinWaitlist(
+    BuildContext context,
+    WidgetRef ref,
+    String eventId,
+  ) async {
+    final idempotencyKey =
+        'waitlist-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    final result = await ref
+        .read(eventRepositoryProvider)
+        .joinWaitlist(eventId: eventId, idempotencyKey: idempotencyKey);
+
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(waitlistResultMessage(result))));
     ref.invalidate(workerEventDetailProvider(eventId));
     ref.invalidate(workerEventsProvider);
   }
