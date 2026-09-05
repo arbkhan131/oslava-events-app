@@ -192,9 +192,9 @@ Environment configuration must separate local, development, and production value
 
 **Database changes:** `tier_release_presets`, `event_tier_release_rules`, initial `notifications`; `publish_event`, `process_due_tier_releases`, and eligibility helpers; scheduled local/hosted job definition in migration.
 
-**Tests:** Every preset; delayed custom A; cumulative A+B+C+F access; idempotent repeated scheduler runs; no next-tier vacancy alert when recruitment is FULL; reopened-vacancy behavior; exclusion of restricted/inactive, confirmed, and known-conflicting recipients.
+**Tests:** Every preset; delayed custom A; cumulative A+B+C+F access; idempotent repeated scheduler runs; no next-tier vacancy alert when recruitment is FULL; reopened-vacancy behavior; exclusion of restricted/inactive recipients. Confirmed-worker and known-conflict notification exclusions remain deferred until the assignment/conflict tables exist.
 
-**Completion criteria:** Backend time alone controls eligibility; every tier opens once at its configured threshold; higher tiers never lose access; FULL recruitment suppresses the next-tier vacancy alert; targeting applies all approved exclusions while Apply remains authoritative.
+**Completion criteria:** Backend time alone controls eligibility; every tier opens once at its configured threshold; higher tiers never lose access; FULL recruitment suppresses the next-tier vacancy alert; targeting applies currently possible exclusions while Apply remains authoritative. Assignment/conflict exclusions are recorded as contracts for their owning phases.
 
 **Dependencies:** Phase 5.
 

@@ -474,8 +474,8 @@ select is(
 
 select is(
   (select recruitment_status from public.events where id = (select id from phase_5_created_event)),
-  'NOT_OPEN'::public.recruitment_status,
-  'publish keeps recruitment NOT_OPEN until tier release phase'
+  'OPEN'::public.recruitment_status,
+  'Phase 6 tier release opens recruitment immediately when first tier is due'
 );
 
 select isnt(

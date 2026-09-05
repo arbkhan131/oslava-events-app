@@ -253,7 +253,7 @@ User, FCM token hash/token, platform, device identifier, active state, last-seen
 
 Durable in-app record: recipient, type, title/body or template payload, related event/assignment, deduplication key, created/read timestamps. One recipient/deduplication key pair prevents duplicate user-visible alerts.
 
-Tier-opened and vacancy-reopened audience queries exclude restricted/inactive workers, workers already confirmed for the event, and workers with a known one-hour conflict. This is notification targeting only; `apply_for_event` always revalidates profile completeness, account state, category eligibility, requirements, conflicts, and capacity.
+Tier-opened and vacancy-reopened audience queries exclude restricted/inactive workers in Phase 6. Once the assignment and conflict tables exist, the same targeting contract must also exclude workers already confirmed for the event and workers with a known one-hour conflict. This is notification targeting only; `apply_for_event` always revalidates profile completeness, account state, category eligibility, requirements, conflicts, and capacity.
 
 ### `notification_deliveries`
 

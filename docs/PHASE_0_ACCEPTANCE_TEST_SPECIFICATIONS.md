@@ -66,8 +66,8 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | AT-012 | Publish Standard, Urgent, Emergency, and Custom tier plans. Verify A/B/C/F opening times, including a deliberately delayed custom A. | Supabase/database |
 | AT-013 | At each tier opening, verify eligibility is cumulative: opening B retains A, opening C retains A+B, and opening F retains A+B+C. | Supabase/database |
 | AT-014 | A Worker below the open tier can view full event detail as Locked but cannot Apply. When eligible, the same event becomes Available without client-side category calculation deciding the mutation. | Supabase/database; Flutter widget/integration |
-| AT-015 | When recruitment is FULL at a later tier threshold, process the tier release. Expect no next-tier vacancy notification. If a vacancy later remains after waitlist processing, notify only currently eligible targets. | Supabase/database scheduler |
-| AT-016 | For tier/vacancy notices, exclude restricted/inactive Workers, already-confirmed Workers, and Workers with a known conflict. Verify a later Apply still revalidates every rule. | Supabase/database; Flutter integration |
+| AT-015 | When recruitment is FULL at a later tier threshold, process the tier release. Expect no next-tier vacancy notification. If a vacancy later remains after waitlist processing, notify only currently eligible targets. Phase 6 covers durable notification creation and duplicate suppression; waitlist-first refill remains deferred until waitlist exists. | Supabase/database scheduler |
+| AT-016 | For tier/vacancy notices, exclude restricted/inactive Workers, already-confirmed Workers, and Workers with a known conflict. Phase 6 covers restricted/inactive exclusion; already-confirmed and known-conflict exclusion are executable once `assignments` and conflict predicates exist. Verify a later Apply still revalidates every rule. | Supabase/database; Flutter integration |
 
 ### Booking, capacity, conflict, and cancellation
 
@@ -130,7 +130,7 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | Phase 3 | AT-001 to AT-009 |
 | Phase 4 | AT-006 staff-only revocation and Worker-to-field contract, AT-006A, AT-009, AT-033, AT-034 contract coverage, plus role/category restoration coverage |
 | Phase 5 | AT-010, AT-011, AT-024/AT-024A contract coverage; AT-024/AT-024A executable assignment integration deferred until `assignments`, conflict predicates, management removal, and notifications exist |
-| Phase 6 | AT-012 to AT-016 |
+| Phase 6 | AT-012, AT-013, AT-015 notification suppression/idempotency, and restricted/inactive coverage for AT-016. AT-014 and remaining AT-015/AT-016 assignment, waitlist, and conflict integration remain assigned to later phases. |
 | Phase 7 | AT-014, AT-015, AT-027, AT-045 |
 | Phase 8 | AT-023, AT-024 |
 | Phase 9 | AT-017 to AT-022 |

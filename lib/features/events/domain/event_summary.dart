@@ -107,6 +107,69 @@ enum TierStrategy {
   }
 }
 
+class TierReleaseOffsets {
+  const TierReleaseOffsets({
+    required this.aMinutes,
+    required this.bMinutes,
+    required this.cMinutes,
+    required this.fMinutes,
+  });
+
+  final int aMinutes;
+  final int bMinutes;
+  final int cMinutes;
+  final int fMinutes;
+
+  static const standard = TierReleaseOffsets(
+    aMinutes: 0,
+    bMinutes: 30,
+    cMinutes: 60,
+    fMinutes: 180,
+  );
+
+  static const urgent = TierReleaseOffsets(
+    aMinutes: 0,
+    bMinutes: 15,
+    cMinutes: 30,
+    fMinutes: 60,
+  );
+
+  static const emergency = TierReleaseOffsets(
+    aMinutes: 0,
+    bMinutes: 5,
+    cMinutes: 10,
+    fMinutes: 15,
+  );
+
+  static TierReleaseOffsets presetFor(TierStrategy strategy) {
+    switch (strategy) {
+      case TierStrategy.standard:
+        return standard;
+      case TierStrategy.urgent:
+        return urgent;
+      case TierStrategy.emergency:
+        return emergency;
+      case TierStrategy.custom:
+        throw ArgumentError('Custom tier schedules must provide offsets.');
+    }
+  }
+
+  bool get isValid =>
+      aMinutes >= 0 &&
+      aMinutes <= bMinutes &&
+      bMinutes <= cMinutes &&
+      cMinutes <= fMinutes;
+
+  Map<String, dynamic> toConfigureRpcParams(String eventId) => {
+    'p_event_id': eventId,
+    'p_a_offset_minutes': aMinutes,
+    'p_b_offset_minutes': bMinutes,
+    'p_c_offset_minutes': cMinutes,
+    'p_f_offset_minutes': fMinutes,
+    'p_reason': 'Configured from admin event form',
+  };
+}
+
 class EventSummary {
   const EventSummary({
     required this.id,
@@ -170,6 +233,7 @@ class EventDraftInput {
     required this.requiredWorkerCount,
     required this.dailyWage,
     required this.tierStrategy,
+    this.customTierOffsets,
     this.mapsUrl,
     this.instructions,
     this.dressCode,
@@ -185,6 +249,7 @@ class EventDraftInput {
   final int requiredWorkerCount;
   final double dailyWage;
   final TierStrategy tierStrategy;
+  final TierReleaseOffsets? customTierOffsets;
   final String? instructions;
   final String? dressCode;
 
@@ -205,6 +270,19 @@ class EventDraftInput {
     'p_requirements': <Map<String, dynamic>>[],
     'p_allowances': <Map<String, dynamic>>[],
   };
+}
+
+String describeTierReleaseOffsets(TierReleaseOffsets offsets) {
+  return 'A ${offsets.aMinutes}m, B ${offsets.bMinutes}m, '
+      'C ${offsets.cMinutes}m, F ${offsets.fMinutes}m';
+}
+
+Duration timeUntilTierOpens({
+  required DateTime opensAt,
+  required DateTime now,
+}) {
+  final remaining = opensAt.difference(now);
+  return remaining.isNegative ? Duration.zero : remaining;
 }
 
 String formatKolkataDateTime12h(DateTime value) {

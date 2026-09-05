@@ -34,6 +34,88 @@ void main() {
         '10/10/2026 3:00 PM',
       );
     });
+
+    test('describes approved tier release preset offsets', () {
+      expect(
+        describeTierReleaseOffsets(
+          TierReleaseOffsets.presetFor(TierStrategy.standard),
+        ),
+        'A 0m, B 30m, C 60m, F 180m',
+      );
+      expect(
+        describeTierReleaseOffsets(
+          TierReleaseOffsets.presetFor(TierStrategy.urgent),
+        ),
+        'A 0m, B 15m, C 30m, F 60m',
+      );
+      expect(
+        describeTierReleaseOffsets(
+          TierReleaseOffsets.presetFor(TierStrategy.emergency),
+        ),
+        'A 0m, B 5m, C 10m, F 15m',
+      );
+    });
+
+    test('validates custom tier release ordering', () {
+      expect(
+        const TierReleaseOffsets(
+          aMinutes: 10,
+          bMinutes: 20,
+          cMinutes: 30,
+          fMinutes: 40,
+        ).isValid,
+        isTrue,
+      );
+      expect(
+        const TierReleaseOffsets(
+          aMinutes: 20,
+          bMinutes: 10,
+          cMinutes: 30,
+          fMinutes: 40,
+        ).isValid,
+        isFalse,
+      );
+    });
+
+    test('maps custom tier release offsets to configure RPC params', () {
+      expect(
+        const TierReleaseOffsets(
+          aMinutes: 1,
+          bMinutes: 2,
+          cMinutes: 3,
+          fMinutes: 4,
+        ).toConfigureRpcParams('event-id'),
+        containsPair('p_event_id', 'event-id'),
+      );
+      expect(
+        const TierReleaseOffsets(
+          aMinutes: 1,
+          bMinutes: 2,
+          cMinutes: 3,
+          fMinutes: 4,
+        ).toConfigureRpcParams('event-id'),
+        containsPair('p_f_offset_minutes', 4),
+      );
+    });
+
+    test('tier countdown never returns a negative duration', () {
+      final now = DateTime.utc(2026, 10, 10, 9);
+
+      expect(
+        timeUntilTierOpens(
+          opensAt: now.add(const Duration(minutes: 15)),
+          now: now,
+        ),
+        const Duration(minutes: 15),
+      );
+      expect(
+        timeUntilTierOpens(
+          opensAt: now.subtract(const Duration(minutes: 15)),
+          now: now,
+        ),
+        Duration.zero,
+      );
+    });
   });
 
   group('Phase 5 event route guard', () {

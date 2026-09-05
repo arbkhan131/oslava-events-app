@@ -24,6 +24,10 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
   final _mapsUrl = TextEditingController();
   final _workers = TextEditingController(text: '10');
   final _wage = TextEditingController(text: '1200');
+  final _tierA = TextEditingController(text: '0');
+  final _tierB = TextEditingController(text: '30');
+  final _tierC = TextEditingController(text: '60');
+  final _tierF = TextEditingController(text: '180');
   final _instructions = TextEditingController();
   final _dressCode = TextEditingController();
   TierStrategy _tierStrategy = TierStrategy.standard;
@@ -37,6 +41,10 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
     _mapsUrl.dispose();
     _workers.dispose();
     _wage.dispose();
+    _tierA.dispose();
+    _tierB.dispose();
+    _tierC.dispose();
+    _tierF.dispose();
     _instructions.dispose();
     _dressCode.dispose();
     super.dispose();
@@ -95,10 +103,79 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
                 ],
                 onChanged: _saving
                     ? null
-                    : (value) => setState(
-                        () => _tierStrategy = value ?? TierStrategy.standard,
-                      ),
+                    : (value) {
+                        final next = value ?? TierStrategy.standard;
+                        setState(() {
+                          _tierStrategy = next;
+                          if (next != TierStrategy.custom) {
+                            _applyPresetOffsets(next);
+                          }
+                        });
+                      },
               ),
+              if (_tierStrategy == TierStrategy.custom) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _tierA,
+                        decoration: const InputDecoration(
+                          labelText: 'A opens after minutes',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: _nonNegativeInt,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _tierB,
+                        decoration: const InputDecoration(
+                          labelText: 'B opens after minutes',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: _nonNegativeInt,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _tierC,
+                        decoration: const InputDecoration(
+                          labelText: 'C opens after minutes',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: _nonNegativeInt,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _tierF,
+                        decoration: const InputDecoration(
+                          labelText: 'F opens after minutes',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: _nonNegativeInt,
+                      ),
+                    ),
+                  ],
+                ),
+              ] else
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    describeTierReleaseOffsets(
+                      TierReleaseOffsets.presetFor(_tierStrategy),
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               TextFormField(
                 controller: _instructions,
                 decoration: const InputDecoration(labelText: 'Instructions'),
@@ -145,8 +222,48 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
     return null;
   }
 
+  String? _nonNegativeInt(String? value) {
+    final parsed = int.tryParse(value ?? '');
+    if (parsed == null || parsed < 0) {
+      return 'Enter zero or more.';
+    }
+    return null;
+  }
+
+  void _applyPresetOffsets(TierStrategy strategy) {
+    final offsets = TierReleaseOffsets.presetFor(strategy);
+    _tierA.text = offsets.aMinutes.toString();
+    _tierB.text = offsets.bMinutes.toString();
+    _tierC.text = offsets.cMinutes.toString();
+    _tierF.text = offsets.fMinutes.toString();
+  }
+
+  TierReleaseOffsets _customOffsetsFromForm() {
+    return TierReleaseOffsets(
+      aMinutes: int.parse(_tierA.text),
+      bMinutes: int.parse(_tierB.text),
+      cMinutes: int.parse(_tierC.text),
+      fMinutes: int.parse(_tierF.text),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final customOffsets = _tierStrategy == TierStrategy.custom
+        ? _customOffsetsFromForm()
+        : null;
+
+    if (customOffsets != null && !customOffsets.isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Tier release offsets must expand in A, B, C, F order.',
+          ),
+        ),
+      );
       return;
     }
 
@@ -169,6 +286,7 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
               requiredWorkerCount: int.parse(_workers.text),
               dailyWage: double.parse(_wage.text),
               tierStrategy: _tierStrategy,
+              customTierOffsets: customOffsets,
               instructions: _instructions.text,
               dressCode: _dressCode.text,
             ),

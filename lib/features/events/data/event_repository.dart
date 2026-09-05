@@ -39,11 +39,31 @@ class SupabaseEventRepository implements EventRepository {
 
   @override
   Future<String> createDraft(EventDraftInput input) async {
+    if (input.tierStrategy == TierStrategy.custom &&
+        input.customTierOffsets == null) {
+      throw ArgumentError('Custom tier strategy requires release offsets.');
+    }
+
+    if (input.customTierOffsets case final offsets? when !offsets.isValid) {
+      throw ArgumentError(
+        'Tier release offsets must expand in A, B, C, F order.',
+      );
+    }
+
     final response = await _client.rpc(
       'create_event_draft',
       params: input.toCreateRpcParams(),
     );
-    return response as String;
+    final eventId = response as String;
+
+    if (input.customTierOffsets case final offsets?) {
+      await _client.rpc(
+        'configure_event_tier_offsets',
+        params: offsets.toConfigureRpcParams(eventId),
+      );
+    }
+
+    return eventId;
   }
 
   @override
