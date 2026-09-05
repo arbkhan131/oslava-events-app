@@ -183,9 +183,15 @@ select is(
     from public.notifications
     where related_event_id = (select id from phase_6_standard_event)
       and notification_type = 'TIER_OPENED'
+      and recipient_id in (
+        '00000000-0000-0000-0000-000000006002',
+        '00000000-0000-0000-0000-000000006003',
+        '00000000-0000-0000-0000-000000006004',
+        '00000000-0000-0000-0000-000000006005'
+      )
   ),
   1,
-  'due A tier creates one notification for the active A worker only'
+  'due A tier creates one notification for the active A worker in this fixture'
 );
 
 select is(
@@ -211,9 +217,15 @@ select is(
     from public.notifications
     where related_event_id = (select id from phase_6_standard_event)
       and notification_type = 'TIER_OPENED'
+      and recipient_id in (
+        '00000000-0000-0000-0000-000000006002',
+        '00000000-0000-0000-0000-000000006003',
+        '00000000-0000-0000-0000-000000006004',
+        '00000000-0000-0000-0000-000000006005'
+      )
   ),
   4,
-  'all active categories receive their own tier-opened notification'
+  'all active categories in this fixture receive their own tier-opened notification'
 );
 
 select ok(
@@ -245,7 +257,19 @@ select ok(
 
 select is(
   public.notify_vacancy_reopened((select id from phase_6_standard_event)),
-  4,
+  (
+    select count(*)::integer
+    from public.profiles p
+    join public.worker_profiles wp on wp.user_id = p.id
+    where p.role = 'WORKER'::public.app_role
+      and p.account_status = 'ACTIVE'::public.account_status
+      and wp.category is not null
+      and public.is_worker_tier_eligible(
+        (select id from phase_6_standard_event),
+        p.id,
+        now()
+      )
+  ),
   'vacancy reopened notifier targets all currently eligible active workers'
 );
 

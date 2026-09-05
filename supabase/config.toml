@@ -254,6 +254,9 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/password_changed_notification.html"
 
 [auth.sms]
+# Enable local phone authentication. Local OTP delivery uses auth.sms.test_otp
+# below; no external SMS provider is enabled for development.
+enabled = true
 # Allow/disallow new user signups via SMS to your project.
 enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
@@ -265,7 +268,14 @@ max_frequency = "5s"
 
 # Use pre-defined map of phone number to OTP for testing.
 [auth.sms.test_otp]
-"+15555550123" = "123456"
+919000000001 = "123456"
+919000000002 = "123456"
+919000000003 = "123456"
+919000000004 = "123456"
+919000000005 = "123456"
+919000000006 = "123456"
+919000000007 = "123456"
+919000000008 = "123456"
 
 # Configure logged in session timeouts.
 # [auth.sessions]
@@ -286,9 +296,12 @@ max_frequency = "5s"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
-enabled = false
-account_sid = ""
-message_service_sid = ""
+enabled = true
+# Local-only placeholder values keep phone auth enabled for fixed test OTP
+# accounts. Real provider credentials must stay out of Git and are not required
+# for local test phones configured under auth.sms.test_otp.
+account_sid = "AC00000000000000000000000000000000"
+message_service_sid = "MG00000000000000000000000000000000"
 # DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
 auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 

@@ -12,7 +12,10 @@ void main() {
 
       expect(environment.name, AppEnvironmentName.local);
       expect(environment.supabaseUrl, 'http://127.0.0.1:54321');
-      expect(environment.supabaseAnonKey, 'local-anon-key');
+      expect(
+        environment.supabaseAnonKey,
+        'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
+      );
     });
 
     test('accepts development Supabase configuration', () {

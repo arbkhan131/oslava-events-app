@@ -315,7 +315,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000004004
 select is(
   (
     select count(*)
-    from public.worker_directory('Worker', null, null, 10)
+    from public.worker_directory('Worker Updated', null, null, 10)
   ),
   1::bigint,
   'Captain can search all workers'

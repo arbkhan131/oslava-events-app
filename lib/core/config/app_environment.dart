@@ -49,7 +49,7 @@ class AppEnvironment {
         : supabaseUrl.trim();
     final resolvedAnonKey =
         supabaseAnonKey.trim().isEmpty && name == AppEnvironmentName.local
-        ? 'local-anon-key'
+        ? 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH'
         : supabaseAnonKey.trim();
 
     final config = AppEnvironment(
