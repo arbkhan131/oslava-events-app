@@ -132,7 +132,7 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | Phase 5 | AT-010, AT-011, AT-024/AT-024A contract coverage; AT-024/AT-024A executable assignment integration deferred until `assignments`, conflict predicates, management removal, and notifications exist |
 | Phase 6 | AT-012, AT-013, AT-015 notification suppression/idempotency, and restricted/inactive coverage for AT-016. AT-014 and remaining AT-015/AT-016 assignment, waitlist, and conflict integration remain assigned to later phases. |
 | Phase 7 | Worker-visible pieces of AT-014, AT-015, and AT-045. Confirmed assignment/My Work population and waitlist mutations remain deferred to the assignment, booking, and waitlist phases. |
-| Phase 8 | AT-023, AT-024 |
+| Phase 8 | AT-023 and executable AT-024 event-time conflict confirmation/flag coverage. Assignment removal and worker-facing resolution UX remain deferred to the management-removal/cancellation phases. |
 | Phase 9 | AT-017 to AT-022 |
 | Phase 10 | AT-025 to AT-032 |
 | Phase 11 | AT-035 to AT-037 |

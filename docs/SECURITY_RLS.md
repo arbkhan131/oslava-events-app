@@ -119,6 +119,7 @@ For `worker_category_history`, `account_actions`, and `role_history`:
 - Assigned Captain/Supervisor reads assignments for assigned events.
 - Admin/Super Admin reads all.
 - No direct client insert/update/delete. Apply, waitlist promotion, cancellation, attendance completion, and authorized removal functions mutate.
+- Phase 8 creates the assignment table for conflict checks with direct client writes disabled; later mutation phases add the controlled write RPCs.
 
 ### `requirement_acknowledgements`
 

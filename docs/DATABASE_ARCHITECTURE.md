@@ -209,9 +209,9 @@ Links a booking request to each acknowledged event requirement and records requi
 
 ### `assignments`
 
-Authoritative reserved seats: event, worker, status, source (`DIRECT_APPLY`, `WAITLIST_PROMOTION`, or authorized management path if approved), confirmed timestamp, category-at-confirmation, booking request/waitlist source, cancellation-lock acknowledgement for late bookings, and completion timestamp.
+Authoritative reserved seats: event, worker, status, source (`DIRECT_APPLY`, `WAITLIST_PROMOTION`, or authorized management path), confirmed timestamp, category-at-confirmation, booking request/waitlist source, cancellation-lock acknowledgement for late bookings, completion timestamp, and management-removal metadata. Phase 8 creates the core table for conflict checks; Phase 9 owns Apply allocation and Phase 10 owns cancellation/waitlist promotion mutations.
 
-Use a partial unique index for one active confirmed assignment per `(event_id, worker_id)`. Capacity is also enforced inside the event-locked allocation function; no client may insert an assignment directly.
+Use a partial unique index for one active confirmed assignment per `(event_id, worker_id)`. Capacity is also enforced inside the event-locked allocation function; no client may insert an assignment directly. The reusable one-hour predicate ignores cancelled/removed assignments and treats exactly 60 minutes as allowed in either direction.
 
 ### `waitlist_entries`
 
@@ -223,7 +223,7 @@ Append-only history: assignment, event, worker, actor, actor role, cancellation 
 
 ### `assignment_review_flags`
 
-Admin-resolution queue for retained confirmed assignments. Stores assignment, flag type (`EVENT_TIME_CONFLICT`, `WORKER_DETAINED`, `WORKER_ROLE_CHANGED`, or `ROLE_CHANGED`), related assignment/event where applicable, detected time, cause/event version or account action, state, resolver, resolution notes, and resolution time. Event edits that create a one-hour conflict, detention after confirmation, and Worker-to-field-role changes create flags when the assignments table exists; none of these conditions silently cancels an assignment.
+Admin-resolution queue for retained confirmed assignments. Stores assignment, flag type (`EVENT_TIME_CONFLICT`, `WORKER_DETAINED`, `WORKER_ROLE_CHANGED`, or `ROLE_CHANGED`), related assignment/event where applicable, detected time, cause/event version or account action, state, resolver, resolution notes, and resolution time. Event edits that create a one-hour conflict now create `EVENT_TIME_CONFLICT` flags after explicit Admin/Super Admin confirmation; detention and Worker-to-field-role changes create flags through their workflow integrations. None of these conditions silently cancels an assignment.
 
 ## Operations and quality
 

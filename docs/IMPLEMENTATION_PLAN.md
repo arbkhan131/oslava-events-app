@@ -218,11 +218,11 @@ Environment configuration must separate local, development, and production value
 
 **Files/components involved:** booking domain service contract, Admin conflict-warning UI, shared time utilities.
 
-**Database changes:** Core `assignments` relation with client writes disabled, `has_booking_conflict`, supporting indexes, shared `assignment_review_flags`, and event-edit conflict scan.
+**Database changes:** Core `assignments` relation with client writes disabled, `has_booking_conflict`, supporting indexes, shared `assignment_review_flags`, and event-edit conflict scan. Phase 8 creates the relation and predicate foundation only; Apply allocation, management removal, cancellation rows, and waitlist promotion remain in their owning phases.
 
 **Tests:** 60-minute boundary allowed; 59-minute gap blocked; overlap blocked; reverse-order same-day booking; overnight events; cancelled/removed assignments ignored; edit-created conflict flagged.
 
-**Completion criteria:** All booking paths and waitlist promotion can call one transaction-safe conflict check; event edits warn and flag without silently removing assignments.
+**Completion criteria:** All booking paths and waitlist promotion can call one transaction-safe conflict check; event edits require explicit confirmation and flag affected assignments without silently removing assignments.
 
 **Dependencies:** Phases 2 and 5.
 
