@@ -117,6 +117,20 @@ class _WorkerDirectoryScreenState extends ConsumerState<WorkerDirectoryScreen> {
                       ),
                     ],
                   ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _updateQuery(
+                        query.copyWith(
+                          accountStatus: AccountStatus.pendingApproval,
+                          clearAccountStatus: false,
+                          offset: 0,
+                        ),
+                      ),
+                      icon: const Icon(Icons.pending_actions),
+                      label: const Text('Pending approvals'),
+                    ),
+                  ),
                   if (widget.role == AppRole.admin ||
                       widget.role == AppRole.superAdmin)
                     const _StaffPanel(),
@@ -156,9 +170,7 @@ class _WorkerDirectoryScreenState extends ConsumerState<WorkerDirectoryScreen> {
                             path: worker.profilePhotoPath,
                           ),
                           title: Text(worker.fullName),
-                          subtitle: Text(
-                            'ID ${worker.workerNumber ?? '-'}  ${worker.category?.databaseValue ?? 'No category'}  ${worker.accountStatus.label}',
-                          ),
+                          subtitle: Text(_workerSubtitle(worker)),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => context.go(
                             '${widget.role.homePath}/workers/${worker.userId}',
@@ -190,6 +202,17 @@ class _WorkerDirectoryScreenState extends ConsumerState<WorkerDirectoryScreen> {
         ),
       ),
     );
+  }
+
+  String _workerSubtitle(WorkerProfile worker) {
+    final category = worker.category?.databaseValue ?? 'No category';
+    final requested = worker.requestedCategory == null
+        ? ''
+        : '  requested ${worker.requestedCategory!.databaseValue}';
+    final type = worker.registrationType == null
+        ? ''
+        : '  ${worker.registrationTypeLabel}';
+    return 'ID ${worker.workerNumber ?? '-'}  $category  ${worker.accountStatus.label}$type$requested';
   }
 
   void _searchChanged(String value) {

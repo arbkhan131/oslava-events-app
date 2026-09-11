@@ -40,6 +40,15 @@ abstract interface class WorkerRepository {
 
   Future<String?> signedProfilePhotoUrl(String? storagePath);
 
+  Future<String?> signedIdCardUrl(String? storagePath);
+
+  Future<void> reviewWorkerRegistration({
+    required String userId,
+    required bool approved,
+    WorkerCategory? category,
+    required String reason,
+  });
+
   Future<String> provisionStaff(StaffProvisionRequest request);
 
   Future<void> changeUserPhone({
@@ -205,6 +214,32 @@ class SupabaseWorkerRepository implements WorkerRepository {
     return _client.storage
         .from('profile-photos')
         .createSignedUrl(storagePath, 5 * 60);
+  }
+
+  @override
+  Future<String?> signedIdCardUrl(String? storagePath) async {
+    if (storagePath == null || storagePath.trim().isEmpty) return null;
+    return _client.storage
+        .from('worker-id-cards')
+        .createSignedUrl(storagePath, 5 * 60);
+  }
+
+  @override
+  Future<void> reviewWorkerRegistration({
+    required String userId,
+    required bool approved,
+    WorkerCategory? category,
+    required String reason,
+  }) {
+    return _client.rpc(
+      'review_worker_registration',
+      params: {
+        'p_target_user_id': userId,
+        'p_approved': approved,
+        'p_category': category?.databaseValue,
+        'p_reason': reason.trim(),
+      },
+    );
   }
 
   @override

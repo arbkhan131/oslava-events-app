@@ -7,12 +7,14 @@ import 'package:oslava_events/app/router/app_router.dart';
 import 'package:oslava_events/features/auth/application/auth_session.dart';
 import 'package:oslava_events/features/workers/data/worker_repository.dart';
 import 'package:oslava_events/features/workers/domain/worker_profile.dart';
+import 'package:oslava_events/features/workers/presentation/worker_detail_screen.dart';
 import 'package:oslava_events/features/workers/presentation/worker_directory_screen.dart';
 
 class FakeWorkerRepository implements WorkerRepository {
   WorkerDirectoryQuery? lastQuery;
   final List<StaffProvisionRequest> provisions = [];
   final List<String> phoneChanges = [];
+  final List<String> registrationReviews = [];
 
   @override
   Future<List<WorkerProfile>> searchWorkers(WorkerDirectoryQuery query) async {
@@ -58,6 +60,21 @@ class FakeWorkerRepository implements WorkerRepository {
   Future<String?> signedProfilePhotoUrl(String? storagePath) async => null;
 
   @override
+  Future<String?> signedIdCardUrl(String? storagePath) async => null;
+
+  @override
+  Future<void> reviewWorkerRegistration({
+    required String userId,
+    required bool approved,
+    WorkerCategory? category,
+    required String reason,
+  }) async {
+    registrationReviews.add(
+      '$userId:$approved:${category?.databaseValue}:$reason',
+    );
+  }
+
+  @override
   Future<String> provisionStaff(StaffProvisionRequest request) async {
     provisions.add(request);
     return 'new-staff-id';
@@ -96,7 +113,27 @@ class FakeWorkerRepository implements WorkerRepository {
 
   @override
   Future<WorkerProfile> loadWorkerDetail(String userId) async =>
-      throw UnimplementedError();
+      WorkerProfile.fromJson({
+        'user_id': userId,
+        'worker_number': 100002,
+        'full_name': 'Pending Worker',
+        'initials': 'PW',
+        'phone_e164': '+919876543212',
+        'profile_photo_path': 'worker-id/profile.jpg',
+        'role': 'WORKER',
+        'account_status': 'PENDING_APPROVAL',
+        'category': 'F',
+        'last_worker_category': 'F',
+        'date_of_birth': '2000-01-02',
+        'native_place': 'Kozhikode',
+        'height_cm': 171,
+        'education_status': 'BSc Physics',
+        'registration_type': 'OLD_WORKER',
+        'requested_category': 'B',
+        'id_card_file_path': 'worker-id/id.pdf',
+        'experience_level': 'HIGHLY_EXPERIENCED',
+        'profile_completed_at': '2026-09-11T10:00:00Z',
+      });
 
   @override
   Future<List<WorkerHistoryEntry>> loadWorkerHistory(String userId) async => [];
@@ -299,6 +336,48 @@ void main() {
       await tester.tap(find.text('Team accounts'));
       await tester.pumpAndSettle();
       expect(find.text('Captain One'), findsOneWidget);
+    });
+  });
+
+  group('P3 registration approval UI', () {
+    testWidgets('shows pending registration details and approves worker', (
+      tester,
+    ) async {
+      final repository = FakeWorkerRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [workerRepositoryProvider.overrideWithValue(repository)],
+          child: const MaterialApp(
+            home: WorkerDetailScreen(
+              userId: 'pending-worker-id',
+              viewerRole: AppRole.captain,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pending Worker'), findsOneWidget);
+      expect(find.text('Old worker'), findsOneWidget);
+      expect(find.text('Kozhikode'), findsOneWidget);
+      expect(find.text('BSc Physics'), findsOneWidget);
+      expect(find.text('Highly experienced'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('Approve worker'),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Pending approval'), findsOneWidget);
+      await tester.tap(find.text('Approve worker'));
+      await tester.pumpAndSettle();
+      expect(find.text('Approve registration'), findsOneWidget);
+      await tester.tap(find.text('Approve').last);
+      await tester.pumpAndSettle();
+
+      expect(repository.registrationReviews, [
+        'pending-worker-id:true:B:Registration approved',
+      ]);
     });
   });
 

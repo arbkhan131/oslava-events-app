@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/application/auth_session.dart';
@@ -50,7 +51,14 @@ class WorkerDetailScreen extends ConsumerWidget {
               Text('Worker ID ${worker.workerNumber ?? '-'}'),
               Text('Phone ${worker.phoneE164}'),
               Text('Category ${worker.category?.databaseValue ?? 'None'}'),
-              Text('Account ${worker.accountStatus.databaseValue}'),
+              Text('Account ${worker.accountStatus.label}'),
+              const SizedBox(height: 12),
+              _RegistrationSummary(worker: worker),
+              if (worker.accountStatus == AccountStatus.pendingApproval &&
+                  viewerRole.canChangeWorkerCategory) ...[
+                const SizedBox(height: 16),
+                _RegistrationReviewActions(worker: worker),
+              ],
               const SizedBox(height: 12),
               _ReliabilitySummary(worker: worker),
               if (viewerRole.canDetainWorkers) ...[
@@ -234,6 +242,304 @@ class WorkerDetailScreen extends ConsumerWidget {
   }
 }
 
+class _RegistrationSummary extends ConsumerWidget {
+  const _RegistrationSummary({required this.worker});
+
+  final WorkerProfile worker;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dob = worker.dateOfBirth;
+    final age = worker.completeYearsOld();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Registration',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            _DetailLine(label: 'Type', value: worker.registrationTypeLabel),
+            _DetailLine(
+              label: 'Requested category',
+              value: worker.requestedCategory?.label ?? '-',
+            ),
+            _DetailLine(label: 'Place', value: worker.nativePlace ?? '-'),
+            _DetailLine(
+              label: 'Date of birth',
+              value: dob == null
+                  ? '-'
+                  : '${dob.toIso8601String().split('T').first} (${age ?? '-'} years)',
+            ),
+            _DetailLine(
+              label: 'Height',
+              value: worker.heightCm == null
+                  ? '-'
+                  : '${worker.heightCm!.toStringAsFixed(0)} cm',
+            ),
+            _DetailLine(
+              label: 'Studying class',
+              value: worker.educationStatus ?? '-',
+            ),
+            _DetailLine(
+              label: 'Experience',
+              value: worker.experienceLevelLabel,
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: worker.idCardFilePath == null
+                  ? null
+                  : () => _openIdCard(context, ref),
+              icon: const Icon(Icons.badge_outlined),
+              label: const Text('Open ID card'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openIdCard(BuildContext context, WidgetRef ref) async {
+    try {
+      final url = await ref
+          .read(workerRepositoryProvider)
+          .signedIdCardUrl(worker.idCardFilePath);
+      if (url == null) throw StateError('ID card file is unavailable.');
+      final opened = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open ID card')));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+}
+
+class _RegistrationReviewActions extends ConsumerWidget {
+  const _RegistrationReviewActions({required this.worker});
+
+  final WorkerProfile worker;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pending approval',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Approve only after checking the worker details and ID card.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _approve(context, ref),
+                  icon: const Icon(Icons.check_circle),
+                  label: const Text('Approve worker'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _reject(context, ref),
+                  icon: const Icon(Icons.cancel),
+                  label: const Text('Reject'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approve(BuildContext context, WidgetRef ref) async {
+    final request = await showDialog<_ApprovalRequest>(
+      context: context,
+      builder: (context) => _ApprovalDialog(worker: worker),
+    );
+    if (request == null || !context.mounted) return;
+    await _review(
+      context,
+      ref,
+      approved: true,
+      category: request.category,
+      reason: request.reason,
+      successMessage: 'Worker approved',
+    );
+  }
+
+  Future<void> _reject(BuildContext context, WidgetRef ref) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => const _ReasonDialog(title: 'Reject registration'),
+    );
+    if (reason == null || reason.trim().isEmpty || !context.mounted) return;
+    await _review(
+      context,
+      ref,
+      approved: false,
+      category: null,
+      reason: reason,
+      successMessage: 'Registration rejected',
+    );
+  }
+
+  Future<void> _review(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool approved,
+    required WorkerCategory? category,
+    required String reason,
+    required String successMessage,
+  }) async {
+    try {
+      await ref
+          .read(workerRepositoryProvider)
+          .reviewWorkerRegistration(
+            userId: worker.userId,
+            approved: approved,
+            category: category,
+            reason: reason,
+          );
+      ref.invalidate(workerDetailProvider(worker.userId));
+      ref.invalidate(workerHistoryProvider(worker.userId));
+      ref.invalidate(workerDirectoryProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(successMessage)));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+}
+
+class _ApprovalRequest {
+  const _ApprovalRequest({required this.category, required this.reason});
+
+  final WorkerCategory category;
+  final String reason;
+}
+
+class _ApprovalDialog extends StatefulWidget {
+  const _ApprovalDialog({required this.worker});
+
+  final WorkerProfile worker;
+
+  @override
+  State<_ApprovalDialog> createState() => _ApprovalDialogState();
+}
+
+class _ApprovalDialogState extends State<_ApprovalDialog> {
+  late WorkerCategory _category =
+      widget.worker.requestedCategory ??
+      widget.worker.category ??
+      WorkerCategory.f;
+  final _reason = TextEditingController(text: 'Registration approved');
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Approve registration'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<WorkerCategory>(
+            initialValue: _category,
+            decoration: const InputDecoration(labelText: 'Approved category'),
+            items: [
+              for (final category in WorkerCategory.values)
+                DropdownMenuItem(value: category, child: Text(category.label)),
+            ],
+            onChanged: (value) {
+              if (value != null) setState(() => _category = value);
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reason,
+            decoration: const InputDecoration(labelText: 'Reason'),
+            maxLines: 2,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_reason.text.trim().isEmpty) return;
+            Navigator.of(context).pop(
+              _ApprovalRequest(
+                category: _category,
+                reason: _reason.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Approve'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProfileAvatar extends ConsumerWidget {
   const _ProfileAvatar({required this.path});
 
@@ -359,7 +665,9 @@ class _ReliabilitySummary extends StatelessWidget {
 }
 
 class _ReasonDialog extends StatefulWidget {
-  const _ReasonDialog();
+  const _ReasonDialog({this.title = 'Reason required'});
+
+  final String title;
 
   @override
   State<_ReasonDialog> createState() => _ReasonDialogState();
@@ -377,7 +685,7 @@ class _ReasonDialogState extends State<_ReasonDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Reason required'),
+      title: Text(widget.title),
       content: TextField(
         controller: _controller,
         decoration: const InputDecoration(labelText: 'Reason'),

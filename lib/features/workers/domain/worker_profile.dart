@@ -183,6 +183,10 @@ class WorkerProfile {
     this.educationStatus,
     this.hasPreviousExperience,
     this.experienceDetails,
+    this.registrationType,
+    this.requestedCategory,
+    this.idCardFilePath,
+    this.experienceLevel,
   });
 
   final String userId;
@@ -215,8 +219,56 @@ class WorkerProfile {
   final String? educationStatus;
   final bool? hasPreviousExperience;
   final String? experienceDetails;
+  final String? registrationType;
+  final WorkerCategory? requestedCategory;
+  final String? idCardFilePath;
+  final String? experienceLevel;
 
   bool get isComplete => profileCompletedAt != null;
+
+  String get registrationTypeLabel {
+    switch (registrationType) {
+      case 'NEW_WORKER':
+        return 'New worker';
+      case 'OLD_WORKER':
+        return 'Old worker';
+      case null:
+        return '-';
+      default:
+        return registrationType!;
+    }
+  }
+
+  String get experienceLevelLabel {
+    switch (experienceLevel) {
+      case 'NO_EXPERIENCE':
+        return 'No experience';
+      case 'SOME_EXPERIENCE':
+        return 'Some experience';
+      case 'HIGHLY_EXPERIENCED':
+        return 'Highly experienced';
+      case null:
+        return hasPreviousExperience == null
+            ? '-'
+            : hasPreviousExperience!
+            ? 'Some experience'
+            : 'No experience';
+      default:
+        return experienceLevel!;
+    }
+  }
+
+  int? completeYearsOld({DateTime? at}) {
+    final dob = dateOfBirth;
+    if (dob == null) return null;
+    final now = at ?? DateTime.now();
+    var age = now.year - dob.year;
+    final birthdayThisYear = DateTime(now.year, dob.month, dob.day);
+    if (birthdayThisYear.isAfter(DateTime(now.year, now.month, now.day))) {
+      age--;
+    }
+    return age;
+  }
 
   static WorkerProfile fromJson(Map<String, dynamic> json) {
     final workerNumberValue = json['worker_number'];
@@ -281,6 +333,12 @@ class WorkerProfile {
       educationStatus: json['education_status'] as String?,
       hasPreviousExperience: json['has_previous_experience'] as bool?,
       experienceDetails: json['experience_details'] as String?,
+      registrationType: json['registration_type'] as String?,
+      requestedCategory: WorkerCategory.fromDatabase(
+        json['requested_category'] as String?,
+      ),
+      idCardFilePath: json['id_card_file_path'] as String?,
+      experienceLevel: json['experience_level'] as String?,
     );
   }
 }
