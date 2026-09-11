@@ -1,21 +1,31 @@
-<<<<<<< HEAD
-# oslava_events
+# Oslava Events
 
-A new Flutter project.
+Oslava Events is a Flutter application backed by Supabase for worker registration, event staffing, booking, field attendance, reports, notifications, privacy controls and Android/iOS release preparation.
 
-## Getting Started
+## Local development
 
-This project is a starting point for a Flutter application.
+Use the local Supabase stack for development unless you are preparing a hosted staging build.
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+npx supabase start
+flutter pub get
+flutter analyze --no-pub
+flutter test --no-pub
+npx supabase test db
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Android local-device testing is documented in `docs/ANDROID_LOCAL_DEVICE_TESTING.md`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-=======
-# oslava-events-app
->>>>>>> a7616824d89c7a93d56a02e333e4dcd926ae7f4a
+## Android staging APK
+
+Release signing is read from `android/key.properties`. Keep the keystore and `android/key.properties` outside Git history. Copy `android/key.properties.example` only as a template.
+
+To build a hosted staging APK, set the public Supabase values and run:
+
+```powershell
+$env:SUPABASE_URL = 'https://your-staging-project.supabase.co'
+$env:SUPABASE_ANON_KEY = 'your-public-anon-or-publishable-key'
+powershell -ExecutionPolicy Bypass -File scripts/build_staging_apk.ps1
+```
+
+The generated APK is written to `build/app/outputs/flutter-apk/app-release.apk`.

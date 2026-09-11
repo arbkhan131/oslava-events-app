@@ -24,7 +24,12 @@ class ProfilePhotoPreparer {
       throw const FormatException('Profile photo must be 5 MB or smaller.');
     }
 
-    final decoded = img.decodeImage(sourceBytes);
+    img.Image? decoded;
+    try {
+      decoded = img.decodeImage(sourceBytes);
+    } catch (_) {
+      throw const FormatException('Profile photo could not be decoded.');
+    }
     if (decoded == null) {
       throw const FormatException('Profile photo could not be decoded.');
     }

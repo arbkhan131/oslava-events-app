@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "674273818413",
+    "project_id": "oslava-events-dev",
+    "storage_bucket": "oslava-events-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:674273818413:android:cb92ab8aa6581b6a8ac5a4",
+        "android_client_info": {
+          "package_name": "com.oslavaevents.oslava_events"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKN8ZoR2HMILVKSvWv7dAdiS2i_uIQvp8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,163 +1,121 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../app/bootstrap.dart';
 import '../data/auth_repository.dart';
-import '../domain/phone_number.dart';
+import '../domain/email_address.dart';
+import 'auth_widgets.dart';
 
 class PasswordRecoveryScreen extends ConsumerStatefulWidget {
   const PasswordRecoveryScreen({super.key});
 
   @override
-  ConsumerState<PasswordRecoveryScreen> createState() {
-    return _PasswordRecoveryScreenState();
-  }
+  ConsumerState<PasswordRecoveryScreen> createState() =>
+      _PasswordRecoveryState();
 }
 
-class _PasswordRecoveryScreenState
-    extends ConsumerState<PasswordRecoveryScreen> {
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  final _newPasswordController = TextEditingController();
-  bool _otpSent = false;
-  bool _isSubmitting = false;
-  String? _message;
+class _PasswordRecoveryState extends ConsumerState<PasswordRecoveryScreen> {
+  final email = TextEditingController();
+  bool sent = false, busy = false;
+  int cooldown = 0;
+  String? message;
+  Timer? timer;
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
-    _newPasswordController.dispose();
+    timer?.cancel();
+    email.dispose();
     super.dispose();
   }
 
-  Future<void> _startRecovery() async {
+  Future<void> send() async {
+    if (busy || cooldown > 0) return;
     setState(() {
-      _isSubmitting = true;
-      _message = null;
+      busy = true;
+      message = null;
     });
-
     try {
-      final environment = ref.read(appEnvironmentProvider);
       await ref
           .read(authRepositoryProvider)
           .startPasswordRecovery(
-            phone: PhoneNumber.parse(_phoneController.text),
-            environmentName: environment.name.name,
+            email: EmailAddress.parse(email.text),
+            environmentName: 'staging',
           );
-
-      if (mounted) {
-        setState(() {
-          _otpSent = true;
-          _message = 'OTP sent to the registered phone number.';
-        });
-      }
-    } on Object {
-      if (mounted) {
-        setState(() {
-          _message = 'Unable to start password recovery.';
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        sent = true;
+        cooldown = 30;
+        message = 'Password reset email sent. Open the link from your email to set a new password.';
+      });
+      timer?.cancel();
+      timer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted || cooldown <= 1) {
+          t.cancel();
+          if (mounted) setState(() => cooldown = 0);
+        } else {
+          setState(() => cooldown--);
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => message = friendlyAuthError(e));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _finishRecovery() async {
-    setState(() {
-      _isSubmitting = true;
-      _message = null;
-    });
-
-    try {
-      await ref
-          .read(authRepositoryProvider)
-          .verifyRecoveryOtpAndSetPassword(
-            phone: PhoneNumber.parse(_phoneController.text),
-            otp: _otpController.text,
-            newPassword: _newPasswordController.text,
-          );
-
-      if (mounted) {
-        setState(() {
-          _message = 'Password updated.';
-        });
-      }
-    } on Object {
-      if (mounted) {
-        setState(() {
-          _message = 'Unable to verify OTP or update password.';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+      if (mounted) setState(() => busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reset password')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone number',
-                    ),
-                  ),
-                  if (_otpSent) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _otpController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'OTP'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _newPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'New password',
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : _otpSent
-                        ? _finishRecovery
-                        : _startRecovery,
-                    child: Text(_otpSent ? 'Update password' : 'Send OTP'),
-                  ),
-                  if (_message != null) ...[
-                    const SizedBox(height: 12),
-                    Text(_message!),
-                  ],
-                ],
-              ),
-            ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Reset password'),
+      leading: BackButton(onPressed: () => context.go('/login')),
+    ),
+    body: AuthFormBody(
+      children: [
+        TextField(
+          controller: email,
+          readOnly: sent,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.email],
+          decoration: const InputDecoration(labelText: 'Email address'),
+          onSubmitted: (_) => send(),
+        ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: busy || cooldown > 0 ? null : send,
+          child: Text(
+            busy
+                ? 'Please wait...'
+                : sent && cooldown > 0
+                ? 'Resend in ${cooldown}s'
+                : sent
+                ? 'Send reset email again'
+                : 'Send reset email',
           ),
         ),
-      ),
-    );
-  }
+        if (sent)
+          TextButton(
+            onPressed: busy
+                ? null
+                : () {
+                    timer?.cancel();
+                    setState(() {
+                      sent = false;
+                      cooldown = 0;
+                      message = null;
+                    });
+                  },
+            child: const Text('Use a different email'),
+          ),
+        if (message != null) Text(message!),
+        if (sent)
+          FilledButton(
+            onPressed: () => context.go('/login'),
+            child: const Text('Back to sign in'),
+          ),
+      ],
+    ),
+  );
 }

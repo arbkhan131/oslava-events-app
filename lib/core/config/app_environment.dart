@@ -1,5 +1,6 @@
 enum AppEnvironmentName {
   local,
+  staging,
   development,
   production;
 
@@ -7,6 +8,9 @@ enum AppEnvironmentName {
     switch (value.trim().toLowerCase()) {
       case 'local':
         return AppEnvironmentName.local;
+      case 'stage':
+      case 'staging':
+        return AppEnvironmentName.staging;
       case 'dev':
       case 'development':
         return AppEnvironmentName.development;
@@ -43,9 +47,10 @@ class AppEnvironment {
     required String supabaseAnonKey,
   }) {
     final name = AppEnvironmentName.parse(environment);
+    final defaultLocalUrl = 'http://127.0.0.1:55321';
     final resolvedUrl =
         supabaseUrl.trim().isEmpty && name == AppEnvironmentName.local
-        ? 'http://127.0.0.1:54321'
+        ? defaultLocalUrl
         : supabaseUrl.trim();
     final resolvedAnonKey =
         supabaseAnonKey.trim().isEmpty && name == AppEnvironmentName.local

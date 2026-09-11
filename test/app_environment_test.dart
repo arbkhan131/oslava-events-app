@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oslava_events/core/config/app_environment.dart';
 
 void main() {
   group('AppEnvironment', () {
-    test('uses safe local defaults', () {
+    test('uses safe local defaults for Android via adb reverse', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
       final environment = AppEnvironment.fromValues(
         environment: 'local',
         supabaseUrl: '',
@@ -11,11 +13,25 @@ void main() {
       );
 
       expect(environment.name, AppEnvironmentName.local);
-      expect(environment.supabaseUrl, 'http://127.0.0.1:54321');
+      expect(environment.supabaseUrl, 'http://127.0.0.1:55321');
       expect(
         environment.supabaseAnonKey,
         'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
       );
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    test('uses safe local defaults for non-Android platforms', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final environment = AppEnvironment.fromValues(
+        environment: 'local',
+        supabaseUrl: '',
+        supabaseAnonKey: '',
+      );
+
+      expect(environment.name, AppEnvironmentName.local);
+      expect(environment.supabaseUrl, 'http://127.0.0.1:55321');
+      debugDefaultTargetPlatformOverride = null;
     });
 
     test('accepts development Supabase configuration', () {
@@ -26,6 +42,18 @@ void main() {
       );
 
       expect(environment.name, AppEnvironmentName.development);
+      expect(environment.supabaseUrl, 'https://example.supabase.co');
+      expect(environment.supabaseAnonKey, 'anon.public');
+    });
+
+    test('accepts staging Supabase configuration', () {
+      final environment = AppEnvironment.fromValues(
+        environment: 'staging',
+        supabaseUrl: 'https://example.supabase.co',
+        supabaseAnonKey: 'anon.public',
+      );
+
+      expect(environment.name, AppEnvironmentName.staging);
       expect(environment.supabaseUrl, 'https://example.supabase.co');
       expect(environment.supabaseAnonKey, 'anon.public');
     });

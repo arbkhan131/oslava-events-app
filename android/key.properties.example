@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties for local release builds.
+# Do not commit android/key.properties or any *.jks/*.keystore file.
+storeFile=C:/path/outside/repo/oslava-events-upload.jks
+storePassword=replace-with-local-secret
+keyAlias=oslava-events-upload
+keyPassword=replace-with-local-secret

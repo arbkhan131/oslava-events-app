@@ -6,3 +6,8 @@ class AuthFailure implements Exception {
   @override
   String toString() => 'AuthFailure: $message';
 }
+
+class PhoneConfirmationRequired extends AuthFailure {
+  const PhoneConfirmationRequired()
+    : super('Verify the code sent to your email, then finish your profile.');
+}

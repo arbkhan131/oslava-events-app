@@ -85,7 +85,7 @@ select is(
     where pg_namespace.nspname = 'public'
       and pg_type.typname = 'account_status'
   ),
-  array['ACTIVE', 'SUSPENDED', 'DETAINED', 'BLACKLISTED', 'INACTIVE']::text[],
+  array['ACTIVE', 'SUSPENDED', 'DETAINED', 'BLACKLISTED', 'INACTIVE', 'PENDING_APPROVAL', 'REJECTED']::text[],
   'account_status enum exists'
 );
 
@@ -357,3 +357,4 @@ select ok(
 select * from finish();
 
 rollback;
+

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(27);
 
 select has_table('public', 'attendance', 'attendance table exists');
 select has_table('public', 'attendance_history', 'attendance history table exists');
@@ -24,6 +24,20 @@ select has_function(
   array['uuid'],
   'attendance counters RPC exists'
 );
+select has_function(
+  'public',
+  'event_attendance_roster_v2',
+  array['uuid', 'text'],
+  'enhanced attendance roster RPC exists'
+);
+select has_function(
+  'public',
+  'field_event_dashboard',
+  array[]::text[],
+  'field event dashboard RPC exists'
+);
+select ok(not has_function_privilege('anon', 'public.event_attendance_roster_v2(uuid,text)', 'EXECUTE'), 'anon cannot execute enhanced roster');
+select ok(not has_function_privilege('anon', 'public.field_event_dashboard()', 'EXECUTE'), 'anon cannot execute field dashboard');
 
 select ok(
   not has_table_privilege('authenticated', 'public.attendance', 'INSERT'),

@@ -11,6 +11,11 @@ void main() {
   group('PhoneNumber', () {
     test('normalizes E.164 phone text', () {
       expect(PhoneNumber.parse('+91 98765-43210').value, '+919876543210');
+      expect(PhoneNumber.parse('9876543210').value, '+919876543210');
+      expect(
+        PhoneNumber.parse('919876543210').authEmail,
+        '919876543210@phone.oslava.local',
+      );
     });
 
     test('rejects non-phone identifiers such as Worker IDs', () {
@@ -28,38 +33,54 @@ void main() {
   group('WorkerRegistrationInput', () {
     test('serializes RPC parameters using trimmed required fields', () {
       final input = WorkerRegistrationInput(
+        registrationType: WorkerRegistrationType.oldWorker,
         fullName: ' Worker One ',
-        initials: ' WO ',
         phone: PhoneNumber.parse('+919876543210'),
         password: 'secret-password',
         profilePhotoPath: 'user/profile.jpg',
+        idCardFilePath: 'user/id.pdf',
         dateOfBirth: DateTime(2000, 1, 2),
-        address: ' Pune ',
-        nativePlace: ' Nashik ',
+        place: ' Pune ',
         heightCm: 172.5,
         educationStatus: ' College ',
-        hasPreviousExperience: true,
-        experienceDetails: ' Events ',
+        experienceLevel: WorkerExperienceLevel.someExperience,
+        requestedCategory: RegistrationWorkerCategory.b,
+        privacyTermsVersion: ' v1.0 ',
       );
 
       expect(input.toRpcParams(), containsPair('full_name', 'Worker One'));
+      expect(input.toRpcParams(), containsPair('native_place', 'Pune'));
+      expect(
+        input.toRpcParams(),
+        containsPair('registration_type', 'OLD_WORKER'),
+      );
+      expect(
+        input.toRpcParams(),
+        containsPair('experience_level', 'SOME_EXPERIENCE'),
+      );
+      expect(input.toRpcParams(), containsPair('p_requested_category', 'B'));
       expect(input.toRpcParams(), containsPair('date_of_birth', '2000-01-02'));
       expect(input.toRpcParams(), containsPair('height_cm', 172.5));
+      expect(
+        input.toRpcParams(),
+        containsPair('privacy_terms_version', 'v1.0'),
+      );
     });
 
     test('requires complete fields before submission', () {
       final input = WorkerRegistrationInput(
+        registrationType: WorkerRegistrationType.newWorker,
         fullName: '',
-        initials: 'WO',
         phone: PhoneNumber.parse('+919876543210'),
         password: 'secret-password',
         profilePhotoPath: 'user/profile.jpg',
+        idCardFilePath: 'user/id.pdf',
         dateOfBirth: DateTime(2000),
-        address: 'Pune',
-        nativePlace: 'Nashik',
+        place: 'Pune',
         heightCm: 172.5,
         educationStatus: 'College',
-        hasPreviousExperience: false,
+        experienceLevel: WorkerExperienceLevel.noExperience,
+        privacyTermsVersion: 'v1.0',
       );
 
       expect(input.validate, throwsFormatException);

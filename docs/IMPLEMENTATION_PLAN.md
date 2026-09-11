@@ -6,6 +6,10 @@ This plan translates `Oslava_Events_Complete_Product_Blueprint.pdf` into bounded
 
 No phase should change a finalized business rule without an explicit blueprint revision. Each phase is intended to be implemented, reviewed, tested, and committed independently.
 
+## Readiness follow-up plan
+
+The 8 September 2026 readiness review identified correctness defects and unfinished user flows in the current implementation. Follow [Readiness completion plan — R1-R11](A:/Dev/oslava_events/docs/READINESS_COMPLETION_PLAN.md) for the requested repair/completion work. Its phase names are separate from the original phases 0-17 below. It preserves this document's finalized business rules and assigns every review finding to a bounded phase. Creating that plan does not start implementation; execute only the specifically requested readiness phase.
+
 ## Non-negotiable business rules
 
 - One Flutter application, Android first and iOS-ready.
@@ -51,7 +55,7 @@ No phase should change a finalized business rule without an explicit blueprint r
 15. Tier/vacancy notifications exclude restricted/inactive, already-confirmed, and known-conflicting workers; Apply always revalidates.
 16. `event_status` is `DRAFT`, `PUBLISHED`, `UPCOMING`, `IN_PROGRESS`, `COMPLETED`, `CLOSED`, or `CANCELLED`; `recruitment_status` is `NOT_OPEN`, `OPEN`, `FULL`, or `CLOSED`.
 17. Reliability weighting is deferred, with a mandatory decision before Phase 13.
-18. Data-retention/privacy decisions are deferred, with a mandatory decision before Phase 16 production hardening.
+18. Data-retention/privacy decisions are closed for V1: fixed retention periods, required Privacy Notice + Terms acknowledgement, controlled erasure requests, private profile-photo lifecycle, 3-year audit retention, production backup/restore runbook targets, and incident-response procedures.
 19. Password reset/recovery is included in V1 through SMS OTP to the registered phone number, followed by setting a new password after OTP verification. SMS provider configuration may differ by environment and provider secrets must never be bundled in Flutter.
 20. Phone-number reassignment is supported in V1 but is not self-service. Worker, Captain, and Supervisor phone numbers may be changed by Admin or Super Admin after manual identity verification. Admin phone numbers may only be changed by Super Admin. Super Admin phone changes require an appropriately privileged controlled flow. The old phone, new phone, actor, reason, and timestamp are audited; reassignment updates the existing account and must not create a second account.
 21. Worker registration requires the worker to be at least 18 years old on the registration date. This applies to Worker registration, not pre-provisioned administrative accounts.
@@ -288,13 +292,13 @@ Environment configuration must separate local, development, and production value
 
 **Files/components involved:** `features/reliability/**`, worker and management profile summaries.
 
-**Database changes:** `reliability_configs`, `worker_reliability_snapshots`; recompute function/trigger or scheduled refresh; current summary projection.
+**Database changes:** `reliability_configs`, `worker_reliability_snapshots`; recompute function/triggers plus nightly reconciliation RPC; current summary projection on `worker_profiles`.
 
 **Tests:** Approved weighting fixtures; score bounds; zero-history worker; attendance/cancellation/review updates; config version reproducibility; proof that score never changes category.
 
-**Completion criteria:** Raw metrics reconcile to source records, score is reproducible and versioned, and no automatic category mutation exists.
+**Completion criteria:** Raw metrics reconcile to source records, score is reproducible and versioned, provisional workers remain unrated until 3 eligible resolved commitments, missing components normalize remaining weights, idempotent recomputation avoids duplicate source-equivalent snapshots, and no automatic category mutation exists.
 
-**Dependencies:** Phases 10-12. Reliability weights, minimum-sample behavior, cancellation effect, and recompute policy must be approved before Phase 13 starts.
+**Dependencies:** Phases 10-12. Reliability weights, minimum-sample behavior, cancellation effect, and recompute policy are closed for Phase 13.
 
 ### Phase 14 - Push notifications and alerts
 
@@ -334,7 +338,7 @@ Environment configuration must separate local, development, and production value
 
 **Tests:** Full acceptance suite; multi-client concurrency; RLS allow/deny matrix; offline stale-state UX; scheduler idempotency; notification retries; backup/restore rehearsal; `flutter analyze`; unit/widget/integration tests.
 
-**Completion criteria:** Data-retention/privacy decisions have been approved before this phase starts; all blueprint acceptance scenarios pass; no capacity or RLS invariant fails under load; known operational alerts and recovery procedures are documented.
+**Completion criteria:** Data-retention/privacy decisions have been approved and recorded; privacy/terms acknowledgement is enforced for Worker registration; retention cleanup is server-side, auditable, idempotent, and locally tested; all blueprint acceptance scenarios pass or have an explicit production-environment dependency; no capacity or RLS invariant fails under load; known operational alerts and recovery procedures are documented.
 
 **Dependencies:** Phases 1-15.
 
@@ -366,11 +370,27 @@ The decisions needed to start Phases 1-2 are closed: phone/password authenticati
 
 These decisions are normative and are listed in the Finalized decision register. They are no longer implementation ambiguities.
 
-### Explicitly deferred with deadlines
+### Closed production-hardening decisions
 
-1. **Before Phase 13:** Approve reliability weights, minimum-sample behavior, cancellation contribution, performance aggregation, and recompute timing. Reliability remains non-blocking for foundation and Phases 1-12.
-2. **Before Phase 14:** Approve reporting-reminder lead time and any configurable notification quiet-time behavior.
-3. **Before Phase 16:** Approve data retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident-response requirements. Production hardening cannot complete without these decisions.
+1. **Closed for Phase 16:** V1 uses fixed retention periods: active profile/current Worker data while active; role/category/account-action history while active and 3 years after closure; assignment/event participation, attendance, performance review/history for 3 years after event `CLOSED`; historical reliability snapshots for 3 years; current reliability state while active; in-app notifications for 180 days; terminal push/outbox attempts for 90 days; invalid/revoked device tokens deleted or irreversibly invalidated promptly; security/audit logs for 3 years unless legal hold or active investigation applies.
+
+2. **Closed for Phase 16:** Privacy Notice + Terms acknowledgement is required before Worker registration completes. V1 records user ID, version, and acceptance timestamp. Push permission remains a separate OS permission and cannot block core login/use. V1 does not include marketing consent or unrelated analytics tracking.
+
+3. **Closed for Phase 16:** Profile-photo replacement uploads/validates the new photo first, atomically updates the profile reference, then deletes the old object; audit metadata records that the photo changed but old image objects are not retained for audit. `INACTIVE` retains the current photo; verified erasure deletes the active photo within 30 days unless legal hold applies.
+
+4. **Closed for Phase 16:** Audit logs are immutable while retained but not forever; retain 3 years and delete only through controlled retention unless legal/investigation hold applies. Client roles cannot alter audit records or retention timestamps.
+
+5. **Closed for Phase 16:** Backup/restore hardening requires a production-oriented runbook with Supabase database backup/PITR assessment, Storage recovery, Edge Function/config recovery, migration forward-fix/rollback procedure, secret restoration outside Git, isolated restore rehearsal, desired RPO <= 1 hour where supported, desired RTO <= 4 hours, and owner acceptance of any launch gap.
+
+6. **Closed for Phase 16:** Incident response covers leaked credentials, compromised user/admin accounts, unauthorized/RLS exposure, bad migrations/data corruption, notification dispatcher misfire, Firebase/FCM outage, and lost privileged device using detect -> contain -> preserve evidence -> assess scope -> recover -> verify -> communicate -> review.
+
+### Closed for Phase 14
+
+Notification delivery decisions are closed. V1 reporting reminders are server-calculated from authoritative `reporting_at` and sent only when the trigger remains in the future: 24 hours before reporting and 2 hours before reporting. Confirmations too close to reporting skip expired reminders, and cancelled/removed assignments or cancelled events do not receive future reminders. Reminder scheduling and delivery are idempotent and duplicate-safe. V1 does not implement app-level quiet hours; operational notifications are not suppressed by application quiet-time rules, while device/OS notification settings remain user-controlled. User-configurable quiet hours are deferred beyond V1 unless explicitly approved later.
+
+### Closed for Phase 13
+
+Reliability scoring is closed: show-up 45%, punctuality 20%, performance 20%, commitment/cancellation 15%; completed event count is raw experience context only. Missing components are excluded and available weights are normalized. `NOT_MARKED` is excluded. Performance first averages reviewers within the same Worker/event, then averages event-level ratings and maps 1-5 stars to 0-100. Only Worker-initiated cancellations penalize commitment; management, event, waitlist, system, and role-change removals are excluded. Workers need 3 eligible resolved commitments before a numerical score; fewer remain `PROVISIONAL` with null score. Recompute is server-side on source changes plus safe reconciliation, snapshots are versioned/reproducible/idempotent, and reliability never changes category.
 
 ### Closed for Phase 3
 

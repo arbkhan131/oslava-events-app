@@ -1,4 +1,5 @@
 import '../../events/domain/event_summary.dart';
+import 'waitlist_result.dart';
 
 enum AssignmentStatus {
   confirmed,
@@ -95,4 +96,44 @@ class CancellationResult {
       ),
     );
   }
+}
+
+class WorkerWaitlistEntry {
+  const WorkerWaitlistEntry({
+    required this.waitlistEntryId,
+    required this.eventId,
+    required this.title,
+    required this.venueName,
+    required this.reportingAt,
+    required this.expectedEndsAt,
+    required this.status,
+    required this.canWithdraw,
+    this.queuePosition,
+  });
+
+  final String waitlistEntryId;
+  final String eventId;
+  final String title;
+  final String venueName;
+  final DateTime reportingAt;
+  final DateTime expectedEndsAt;
+  final WaitlistEntryStatus status;
+  final int? queuePosition;
+  final bool canWithdraw;
+
+  static WorkerWaitlistEntry fromJson(Map<String, dynamic> json) {
+    return WorkerWaitlistEntry(
+      waitlistEntryId: json['waitlist_entry_id'] as String,
+      eventId: json['event_id'] as String,
+      title: json['title'] as String,
+      venueName: json['venue_name'] as String,
+      reportingAt: DateTime.parse(json['reporting_at'] as String),
+      expectedEndsAt: DateTime.parse(json['expected_ends_at'] as String),
+      status: WaitlistEntryStatus.fromDatabase(json['status'] as String),
+      queuePosition: (json['queue_position'] as num?)?.toInt(),
+      canWithdraw: json['can_withdraw'] as bool? ?? false,
+    );
+  }
+
+  String get reportingLabel => formatKolkataDateTime12h(reportingAt);
 }

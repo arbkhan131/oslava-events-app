@@ -28,6 +28,7 @@ select has_function(
     'numeric',
     'text',
     'boolean',
+    'text',
     'text'
   ],
   'worker registration RPC exists'
@@ -210,7 +211,8 @@ select lives_ok(
       172.5,
       'College',
       true,
-      'Events'
+      'Events',
+      'v1.0'
     )
   $$,
   'adult Worker registration completes'
@@ -325,7 +327,8 @@ select throws_ok(
       160::numeric,
       'School',
       false,
-      null
+      null,
+      'v1.0'
     )
   $$,
   'P0001',

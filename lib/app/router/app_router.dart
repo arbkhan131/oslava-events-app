@@ -1,4 +1,8 @@
-import 'package:flutter/widgets.dart';
+import '../app.dart' show authBootstrapEnabledProvider;
+import '../../features/auth/presentation/session_status_screen.dart';
+import '../../features/shell/presentation/role_navigation_shell.dart';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,6 +18,8 @@ import '../../features/events/presentation/admin_event_list_screen.dart';
 import '../../features/events/presentation/worker_event_detail_screen.dart';
 import '../../features/events/presentation/worker_event_list_screen.dart';
 import '../../features/events/presentation/worker_my_work_screen.dart';
+import '../../features/notifications/presentation/alerts_screen.dart';
+import '../../features/reports/presentation/event_report_screen.dart';
 import '../../features/shell/presentation/role_home_screen.dart';
 import '../../features/workers/presentation/edit_worker_profile_screen.dart';
 import '../../features/workers/presentation/worker_detail_screen.dart';
@@ -21,17 +27,48 @@ import '../../features/workers/presentation/worker_directory_screen.dart';
 import '../../features/workers/presentation/worker_profile_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final session =
-      ref.watch(authSessionProvider) ?? ref.watch(derivedAuthSessionProvider);
-
-  return GoRouter(
+  final controller = ref.read(authSessionControllerProvider);
+  final router = GoRouter(
     initialLocation: '/',
-    redirect: (context, state) => roleAwareRedirect(
-      isAuthenticated: session != null,
-      role: session?.role,
-      location: state.uri.path,
+    refreshListenable: controller,
+    redirect: (context, state) {
+      final session = ref.read(authSessionProvider) ?? controller.session;
+      if (ref.read(authBootstrapEnabledProvider) &&
+          ref.read(authSessionProvider) == null) {
+        if (controller.authFlowInProgress) return null;
+        if (controller.loading ||
+            controller.error != null ||
+            session?.isRestricted == true) {
+          return state.uri.path == '/session' ? null : '/session';
+        }
+        if (session != null && !session.profileComplete) {
+          return state.uri.path == '/register' ? null : '/register';
+        }
+      }
+      if (state.uri.path == '/session') {
+        return session?.role.homePath ?? '/login';
+      }
+      return roleAwareRedirect(
+        isAuthenticated: session != null,
+        role: session?.role,
+        location: state.uri.path,
+      );
+    },
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(title: const Text('Page unavailable')),
+      body: Center(
+        child: TextButton(
+          onPressed: () => context.go('/'),
+          child: const Text('Return home'),
+        ),
+      ),
     ),
-    routes: [
+    routes: _nestRoleRoutes([
+      GoRoute(
+        path: '/session',
+        builder: (context, state) => const SessionStatusScreen(),
+      ),
+
       GoRoute(path: '/', builder: (context, state) => const SizedBox.shrink()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
@@ -46,6 +83,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         GoRoute(
           path: role.homePath,
           builder: (context, state) => RoleHomeScreen(role: role),
+        ),
+      for (final role in AppRole.values)
+        GoRoute(
+          path: '${role.homePath}/alerts',
+          builder: (context, state) => const AlertsScreen(),
         ),
       GoRoute(
         path: '/worker/profile',
@@ -81,6 +123,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/captain/events/:id/report',
+        builder: (context, state) =>
+            EventReportScreen(eventId: state.pathParameters['id']!),
+      ),
+      GoRoute(
         path: '/captain/workers',
         builder: (context, state) =>
             const WorkerDirectoryScreen(role: AppRole.captain),
@@ -103,6 +150,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           eventId: state.pathParameters['id']!,
           basePath: '/supervisor',
         ),
+      ),
+      GoRoute(
+        path: '/supervisor/events/:id/report',
+        builder: (context, state) =>
+            EventReportScreen(eventId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/supervisor/workers',
@@ -146,11 +198,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/admin/events/:id/edit',
+        builder: (context, state) => AdminEventFormScreen(
+          basePath: '/admin',
+          eventId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
         path: '/admin/events/:id/attendance',
         builder: (context, state) => AttendanceRosterScreen(
           eventId: state.pathParameters['id']!,
           basePath: '/admin',
         ),
+      ),
+      GoRoute(
+        path: '/admin/events/:id/report',
+        builder: (context, state) =>
+            EventReportScreen(eventId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/super-admin/workers',
@@ -182,15 +246,89 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/super-admin/events/:id/edit',
+        builder: (context, state) => AdminEventFormScreen(
+          basePath: '/super-admin',
+          eventId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
         path: '/super-admin/events/:id/attendance',
         builder: (context, state) => AttendanceRosterScreen(
           eventId: state.pathParameters['id']!,
           basePath: '/super-admin',
         ),
       ),
-    ],
+      GoRoute(
+        path: '/super-admin/events/:id/report',
+        builder: (context, state) =>
+            EventReportScreen(eventId: state.pathParameters['id']!),
+      ),
+    ]),
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
+
+List<RouteBase> _nestRoleRoutes(List<GoRoute> flat) {
+  GoRoute nested(GoRoute parent, String fullPath, String relativePath) {
+    final descendants = flat
+        .where((route) => route.path.startsWith('$fullPath/'))
+        .toList();
+    final direct = descendants.where(
+      (route) => !descendants.any(
+        (other) => other != route && route.path.startsWith('${other.path}/'),
+      ),
+    );
+    return GoRoute(
+      path: relativePath,
+      builder: parent.builder,
+      routes: direct
+          .map(
+            (child) => nested(
+              child,
+              child.path,
+              child.path.substring(fullPath.length + 1),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  return [
+    ...flat.where(
+      (route) => !AppRole.values.any(
+        (role) =>
+            route.path == role.homePath ||
+            route.path.startsWith('${role.homePath}/'),
+      ),
+    ),
+    for (final role in AppRole.values)
+      ShellRoute(
+        builder: (context, state, child) => Consumer(
+          builder: (context, ref, _) {
+            final session =
+                ref.watch(authSessionProvider) ??
+                ref.watch(derivedAuthSessionProvider);
+            return RoleNavigationShell(
+              key: ValueKey(
+                '${session?.userId}:${session?.role}:${session?.accountStatus}',
+              ),
+              role: role,
+              child: child,
+            );
+          },
+        ),
+        routes: [
+          nested(
+            flat.firstWhere((route) => route.path == role.homePath),
+            role.homePath,
+            role.homePath,
+          ),
+        ],
+      ),
+  ];
+}
 
 String? roleAwareRedirect({
   required bool isAuthenticated,
@@ -212,7 +350,7 @@ String? roleAwareRedirect({
     return '/login';
   }
 
-  if (isLogin || location == '/') {
+  if (isPublicAuthRoute || isLogin || location == '/') {
     return homePath;
   }
 
@@ -245,4 +383,20 @@ String? roleAwareRedirect({
   }
 
   return null;
+}
+
+void invalidateUserData(WidgetRef ref) {
+  ref.invalidate(adminEventsProvider);
+  ref.invalidate(workerEventsProvider);
+  ref.invalidate(workerEventDetailProvider);
+  ref.invalidate(workerAssignmentsProvider);
+  ref.invalidate(fieldEventsProvider);
+  ref.invalidate(attendanceRosterProvider);
+  ref.invalidate(ownWorkerProfileProvider);
+  ref.invalidate(workerDetailProvider);
+  ref.invalidate(workerHistoryProvider);
+  ref.invalidate(workerDirectoryProvider);
+  ref.invalidate(workerSearchTextProvider);
+  ref.invalidate(eventReportProvider);
+  ref.invalidate(alertsProvider);
 }

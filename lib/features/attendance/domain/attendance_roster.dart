@@ -64,6 +64,14 @@ class AttendanceRosterEntry {
     this.currentCategory,
     this.markedAt,
     this.notes,
+    this.totalCount,
+    this.filteredCount,
+    this.fullCounters,
+    this.reviewId,
+    this.reviewStars,
+    this.reviewTags = const [],
+    this.reviewNotes,
+    this.reviewUpdatedAt,
   });
 
   final String assignmentId;
@@ -79,6 +87,14 @@ class AttendanceRosterEntry {
   final AttendanceStatus attendanceStatus;
   final DateTime? markedAt;
   final String? notes;
+  final int? totalCount;
+  final int? filteredCount;
+  final AttendanceCounters? fullCounters;
+  final String? reviewId;
+  final int? reviewStars;
+  final List<String> reviewTags;
+  final String? reviewNotes;
+  final DateTime? reviewUpdatedAt;
 
   static AttendanceRosterEntry fromJson(Map<String, dynamic> json) {
     return AttendanceRosterEntry(
@@ -105,6 +121,27 @@ class AttendanceRosterEntry {
           ? null
           : DateTime.parse(json['marked_at'] as String),
       notes: json['notes'] as String?,
+      totalCount: (json['total_count'] as num?)?.toInt(),
+      filteredCount: (json['filtered_count'] as num?)?.toInt(),
+      fullCounters: json['total_count'] == null
+          ? null
+          : AttendanceCounters(
+              total: (json['total_count'] as num).toInt(),
+              filtered: (json['filtered_count'] as num?)?.toInt(),
+              notMarked: (json['not_marked_count'] as num?)?.toInt() ?? 0,
+              present: (json['present_count'] as num?)?.toInt() ?? 0,
+              late: (json['late_count'] as num?)?.toInt() ?? 0,
+              absent: (json['absent_count'] as num?)?.toInt() ?? 0,
+            ),
+      reviewId: json['review_id'] as String?,
+      reviewStars: (json['review_stars'] as num?)?.toInt(),
+      reviewTags: (json['review_tags'] as List<dynamic>? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
+      reviewNotes: json['review_notes'] as String?,
+      reviewUpdatedAt: json['review_updated_at'] == null
+          ? null
+          : DateTime.parse(json['review_updated_at'] as String),
     );
   }
 }
@@ -116,9 +153,11 @@ class AttendanceCounters {
     required this.present,
     required this.late,
     required this.absent,
+    this.filtered,
   });
 
   final int total;
+  final int? filtered;
   final int notMarked;
   final int present;
   final int late;
@@ -145,10 +184,49 @@ class AttendanceCounters {
 
     return AttendanceCounters(
       total: roster.length,
+      filtered: null,
       notMarked: notMarked,
       present: present,
       late: late,
       absent: absent,
+    );
+  }
+}
+
+class FieldEventDashboard {
+  const FieldEventDashboard({
+    required this.eventCount,
+    required this.assignedTodayCount,
+    required this.requiredTodayCount,
+    required this.confirmedTodayCount,
+    required this.attendanceTotal,
+    required this.attendanceNotMarked,
+    required this.attendancePresent,
+    required this.attendanceLate,
+    required this.attendanceAbsent,
+  });
+
+  final int eventCount;
+  final int assignedTodayCount;
+  final int requiredTodayCount;
+  final int confirmedTodayCount;
+  final int attendanceTotal;
+  final int attendanceNotMarked;
+  final int attendancePresent;
+  final int attendanceLate;
+  final int attendanceAbsent;
+
+  static FieldEventDashboard fromJson(Map<String, dynamic> json) {
+    return FieldEventDashboard(
+      eventCount: (json['event_count'] as num).toInt(),
+      assignedTodayCount: (json['assigned_today_count'] as num).toInt(),
+      requiredTodayCount: (json['required_today_count'] as num).toInt(),
+      confirmedTodayCount: (json['confirmed_today_count'] as num).toInt(),
+      attendanceTotal: (json['attendance_total'] as num).toInt(),
+      attendanceNotMarked: (json['attendance_not_marked'] as num).toInt(),
+      attendancePresent: (json['attendance_present'] as num).toInt(),
+      attendanceLate: (json['attendance_late'] as num).toInt(),
+      attendanceAbsent: (json['attendance_absent'] as num).toInt(),
     );
   }
 }

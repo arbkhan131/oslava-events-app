@@ -26,7 +26,7 @@ select has_function(
 select has_function(
   'public',
   'worker_directory',
-  array['text', 'public.account_status', 'public.worker_category', 'integer'],
+  array['text', 'public.account_status', 'public.worker_category', 'integer', 'integer'],
   'worker directory RPC exists'
 );
 

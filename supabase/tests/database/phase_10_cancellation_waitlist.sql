@@ -2,7 +2,26 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(27);
+-- Sequential regression fixtures use both phases of the R2 booking contract.
+-- Real contender overlap is verified separately by test_readiness_r2.py.
+create function pg_temp.apply_and_resolve(p_event_id uuid,p_idempotency_key text,
+  p_acknowledged_requirement_ids uuid[] default '{}',p_late_cancellation_acknowledged boolean default false)
+returns table(booking_request_id uuid,result public.booking_result,result_detail_code text,
+  assignment_id uuid,event_id uuid,vacancy_count integer)
+language plpgsql as $$
+declare r record;
+begin
+  select * into r from public.apply_for_event(p_event_id,p_idempotency_key,p_acknowledged_requirement_ids,p_late_cancellation_acknowledged);
+  if r.result='PENDING' then
+    perform pg_sleep(1.05);
+    return query select * from public.get_booking_result(r.booking_request_id);
+  else
+    return query select r.booking_request_id,r.result,r.result_detail_code,r.assignment_id,r.event_id,r.vacancy_count;
+  end if;
+end $$;
+
+
+select plan(33);
 
 select has_table('public', 'waitlist_entries', 'waitlist entries table exists');
 select has_table('public', 'cancellations', 'cancellations table exists');
@@ -10,6 +29,8 @@ select has_function('public', 'join_waitlist', array['uuid', 'text', 'uuid[]'], 
 select has_function('public', 'withdraw_waitlist', array['uuid', 'text'], 'withdraw waitlist RPC exists');
 select has_function('public', 'cancel_assignment', array['uuid', 'text', 'text'], 'cancel assignment RPC exists');
 select has_function('public', 'promote_waitlist', array['uuid'], 'promote waitlist RPC exists');
+select has_function('public', 'worker_event_detail_full', array['uuid'], 'worker event detail full RPC exists');
+select has_function('public', 'worker_my_waitlist', array[]::text[], 'worker my waitlist RPC exists');
 
 select ok(
   not has_table_privilege('authenticated', 'public.waitlist_entries', 'INSERT'),
@@ -19,6 +40,16 @@ select ok(
 select ok(
   not has_table_privilege('authenticated', 'public.cancellations', 'INSERT'),
   'authenticated users cannot directly insert cancellations'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.worker_event_detail_full(uuid)', 'EXECUTE'),
+  'anon cannot execute worker detail full'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.worker_my_waitlist()', 'EXECUTE'),
+  'anon cannot execute worker my waitlist'
 );
 
 insert into auth.users (
@@ -106,14 +137,14 @@ select public.process_due_tier_releases();
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010002', true);
 
 create temp table phase_10_waitlist_fill as
-select * from public.apply_for_event((select id from phase_10_events where key = 'waitlist'), 'fill-waitlist', '{}', false);
+select * from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'waitlist'), 'fill-waitlist', '{}', false);
 
 select is((select result from phase_10_waitlist_fill), 'CONFIRMED'::public.booking_result, 'initial apply fills event');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010004', true);
 
 select is(
-  (select result from public.apply_for_event((select id from phase_10_events where key = 'waitlist'), 'full-no-auto', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'waitlist'), 'full-no-auto', '{}', false)),
   'WAITLIST_AVAILABLE'::public.booking_result,
   'apply to full event returns waitlist available'
 );
@@ -128,6 +159,18 @@ create temp table phase_10_join_result as
 select * from public.join_waitlist((select id from phase_10_events where key = 'waitlist'), 'join-c1', '{}');
 
 select is((select status from phase_10_join_result), 'WAITING'::public.waitlist_status, 'explicit join creates waiting entry');
+
+select is(
+  (select worker_event_detail_full->>'own_waitlist_entry_id' from (select public.worker_event_detail_full((select id from phase_10_events where key = 'waitlist')) as worker_event_detail_full) d),
+  (select waitlist_entry_id::text from phase_10_join_result),
+  'worker detail full exposes own waitlist entry'
+);
+
+select is(
+  (select count(*)::integer from public.worker_my_waitlist() where waitlist_entry_id = (select waitlist_entry_id from phase_10_join_result)),
+  1,
+  'worker my waitlist exposes active waiting entry'
+);
 select is((select queue_position from phase_10_join_result), 1, 'first waiting worker has position 1');
 
 select is(
@@ -149,7 +192,7 @@ select ok(
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010002', true);
 create temp table phase_10_category_fill as
-select * from public.apply_for_event((select id from phase_10_events where key = 'promote_category'), 'fill-category', '{}', false);
+select * from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'promote_category'), 'fill-category', '{}', false);
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010004', true);
 select * from public.join_waitlist((select id from phase_10_events where key = 'promote_category'), 'join-category-c', '{}');
@@ -216,7 +259,7 @@ select is(
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010002', true);
 create temp table phase_10_same_fill as
-select * from public.apply_for_event((select id from phase_10_events where key = 'promote_same_category'), 'fill-same', '{}', false);
+select * from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'promote_same_category'), 'fill-same', '{}', false);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010004', true);
 select * from public.join_waitlist((select id from phase_10_events where key = 'promote_same_category'), 'join-same-c1', '{}');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010005', true);
@@ -246,13 +289,13 @@ select is(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010004', true);
 
 select is(
-  (select result_detail_code from public.apply_for_event((select id from phase_10_events where key = 'late'), 'late-needs-ack', '{}', false)),
+  (select result_detail_code from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'late'), 'late-needs-ack', '{}', false)),
   'LATE_CANCELLATION_ACK_REQUIRED',
   'late booking requires explicit acknowledgement'
 );
 
 create temp table phase_10_late_apply as
-select * from public.apply_for_event((select id from phase_10_events where key = 'late'), 'late-with-ack', '{}', true);
+select * from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'late'), 'late-with-ack', '{}', true);
 
 select ok(
   (select late_cancellation_acknowledged from public.assignments where id = (select assignment_id from phase_10_late_apply)),
@@ -274,7 +317,7 @@ select throws_ok(
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010002', true);
 create temp table phase_10_skip_fill as
-select * from public.apply_for_event((select id from phase_10_events where key = 'skip'), 'fill-skip', '{}', false);
+select * from pg_temp.apply_and_resolve((select id from phase_10_events where key = 'skip'), 'fill-skip', '{}', false);
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000010006', true);
 select * from public.join_waitlist((select id from phase_10_events where key = 'skip'), 'join-skip-f', '{}');
 

@@ -109,6 +109,20 @@ Tracks recovery initiation metadata without storing provider secrets: user, regi
 
 Profile photos are stored in a private Supabase Storage bucket named `profile-photos`. Allowed source MIME types are `image/jpeg`, `image/png`, and `image/webp`; maximum source upload size is 5 MB. Flutter should crop/resize/compress toward about 1 MB where practical, but storage/server policy remains authoritative for MIME type, size, ownership, and path restrictions.
 
+When a Worker replaces a profile photo, the new object is uploaded and validated first, the profile reference is updated atomically, and the old object is deleted after successful replacement. Audit metadata records that the photo changed, but old image objects are not retained for audit. `INACTIVE` accounts retain current photos; verified erasure requests delete active photos within 30 days unless legal hold applies.
+
+### `privacy_terms_versions`
+
+Versioned Privacy Notice and Terms records. Exactly one active V1 version is exposed for registration.
+
+### `privacy_terms_acceptances`
+
+Append-only acknowledgement ledger: user, privacy/terms version, and accepted timestamp. Worker registration cannot complete without the current active version. V1 does not add marketing consent or unrelated analytics tracking.
+
+### `account_erasure_requests`
+
+Audited request ledger for verified correction/erasure workflows: target user, requester, requester role, reason, status, due date, completion metadata, and timestamps. Requesting erasure immediately disables app access by setting `account_status = INACTIVE`; current PII/photo removal and historical anonymization must be completed through controlled server-side workflows without breaking staffing/event/audit integrity.
+
 ### Authorization invariants
 
 - Super Admin can create/revoke Admin, Captain, and Supervisor roles.
@@ -237,17 +251,19 @@ Event-based feedback: event, assignment/worker, reviewer, reviewer role snapshot
 
 ### `reliability_configs`
 
-Versioned, effective-dated score configuration with named weights/penalties and minimum-sample rules. Published versions are immutable. Weighting, minimum-sample behavior, cancellation contribution, performance aggregation, and recompute timing remain intentionally deferred and must be approved before Phase 13; they do not block foundation work.
+Versioned, effective-dated score configuration with named weights/penalties and minimum-sample rules. Published versions are immutable. V1 uses show-up 45%, punctuality 20%, performance 20%, and commitment/cancellation 15%, with 3 eligible resolved commitments required before a numerical score.
+
+The formula excludes missing components and normalizes the remaining available weights. Show-up is `100 * (PRESENT + LATE) / (PRESENT + LATE + ABSENT)` and excludes `NOT_MARKED`. Punctuality is `100 * PRESENT / (PRESENT + LATE)`. Performance first averages all reviewer ratings for the same Worker/event, then averages those event averages and converts 1-5 stars to 0-100 with `((average_stars - 1) / 4) * 100`. Commitment is `100 * (1 - worker_initiated_cancellations / eligible_commitments)`, clamped at zero. Management/event/system/role-change removals, event cancellations, pre-promotion waitlist withdrawals, and blocked late-cancellation attempts do not penalize reliability.
 
 ### `worker_reliability_snapshots`
 
-Worker, computed score, configuration version, raw attendance/completed/late/absent/cancellation/performance metrics, source-through timestamp, and computed timestamp. Current score may be cached on `worker_profiles`; snapshots preserve reproducibility.
+Worker, computed score, configuration version, raw attendance/completed/late/absent/cancellation/performance metrics, source-through timestamp, source hash, and computed timestamp. Current score and raw display metrics are cached on `worker_profiles`; snapshots preserve reproducibility and idempotent recompute avoids duplicate source-equivalent snapshots.
 
 ## Notifications and devices
 
 ### `device_tokens`
 
-User, FCM token hash/token, platform, device identifier, active state, last-seen timestamp, and invalidated timestamp. Users may register only their own device. Tokens are never readable by other client users.
+User, FCM token hash/token, platform, device identifier, app environment (`local`, `development`, `production`), active state, last-seen timestamp, and invalidated timestamp. Users may register only their own device. Tokens are never readable by other client users. FCM server credentials and service-role credentials remain server-side only.
 
 ### `notifications`
 
@@ -259,11 +275,27 @@ Tier-opened and vacancy-reopened audience queries exclude restricted/inactive wo
 
 Outbox/delivery attempts: notification, channel, state, attempts, next attempt, claimed timestamp/worker, provider response code, sent/failed timestamps. Business transactions insert notifications; a trusted dispatcher sends FCM and retries independently.
 
+### `reporting_reminder_schedules`
+
+Assignment-scoped reminder schedule rows for confirmed Workers at 24 hours and 2 hours before authoritative `events.reporting_at`. Rows are inserted only for future trigger times, are unique per assignment/offset, and are skipped when the event is cancelled or the assignment is no longer confirmed. Due processing inserts durable `REPORTING_REMINDER` notifications with deterministic deduplication keys.
+
+V1 has no user-configurable app-level quiet hours. Operational notifications are delivered without application-level quiet-time suppression; device/OS settings remain outside the database model.
+
 ## Audit
 
 ### `audit_logs`
 
 Append-only critical-operation ledger: actor ID and role snapshot, action, entity type/ID, before/after JSON, reason, related event, request/correlation ID, timestamp, and trusted source. Client roles receive no insert/update/delete privileges. Dedicated domain-history tables remain the primary readable history; `audit_logs` is the security/operations record.
+
+Audit logs are retained for 3 years unless a legal requirement, legal hold, or active incident investigation requires longer retention. They are immutable while retained, but not retained forever.
+
+### `retention_cleanup_runs`
+
+Auditable server-side cleanup ledger recording dry-run/live retention executions, actor, row counts, policy metadata, start/completion timestamps, and dry-run mode. `run_retention_cleanup` is idempotent and deletes only data that is safe to remove without damaging operational integrity: expired in-app notifications, expired terminal delivery attempts, invalidated device tokens, and expired audit logs that are not under legal hold. Other erasure/anonymization work must be expanded by reviewed migrations.
+
+### `audit_log_legal_holds`
+
+Controlled hold ledger for audit records that must outlive normal 3-year retention because of legal requirements, active investigations, or dispute preservation. Only trusted administrative/server flows can create or release holds. Client roles cannot directly alter audit logs or retention timestamps.
 
 ## Relationships
 
@@ -316,7 +348,7 @@ No derived client read model is an authorization or mutation authority.
 ## Deferred design gates
 
 - Reliability weighting and calculation policy must be finalized before Phase 13. The schema reserves versioned configuration/snapshots without selecting weights now.
-- Data retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident-response rules must be finalized before Phase 16 production hardening.
+- Data retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident-response rules are finalized for Phase 16. See `RETENTION_PRIVACY_POLICY.md`, `BACKUP_RESTORE_RUNBOOK.md`, and `INCIDENT_RESPONSE_RUNBOOK.md`.
 - Other later-phase workflow details and their deadlines are tracked in `IMPLEMENTATION_PLAN.md`; none may be filled by an unreviewed schema assumption.
 
 Phase 4 role/account decisions are closed. Assignment-review flagging for existing confirmed assignments is integrated when `assignments` is created, and management role-change withdrawal of active waitlist rows is integrated when `waitlist_entries` is created. Those are implementation dependencies, not open business-rule decisions.

@@ -27,21 +27,26 @@ class WorkerEventListScreen extends ConsumerWidget {
             }
             return RefreshIndicator(
               onRefresh: () => ref.refresh(workerEventsProvider.future),
-              child: ListView.separated(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
                 itemCount: items.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final event = items[index];
-                  return ListTile(
-                    title: Text(event.title),
-                    subtitle: Text(
-                      '${event.venueName}\n'
-                      '${formatKolkataDateTime12h(event.reportingAt)}  '
-                      '${event.currencyCode} ${event.dailyWage.toStringAsFixed(0)}',
+                  return Card(
+                    child: ListTile(
+                      title: Text(event.title),
+                      subtitle: Text(
+                        '${event.venueName}\n'
+                        'Report ${formatKolkataDateTime12h(event.reportingAt)} · '
+                        '${event.currencyCode} ${event.dailyWage.toStringAsFixed(0)}\n'
+                        '${event.vacancyCount} vacant · '
+                        '${event.openCategories.isEmpty ? 'No categories open' : 'Open: ${event.openCategories.join(', ')}'}'
+                        '${_tierText(event)}',
+                      ),
+                      isThreeLine: true,
+                      trailing: _ActionChip(event: event),
+                      onTap: () => context.go('/worker/events/${event.id}'),
                     ),
-                    isThreeLine: true,
-                    trailing: _ActionChip(event: event),
-                    onTap: () => context.go('/worker/events/${event.id}'),
                   );
                 },
               ),
@@ -80,4 +85,19 @@ class _ActionChip extends StatelessWidget {
       labelStyle: TextStyle(color: color),
     );
   }
+}
+
+String _tierText(WorkerEvent event) {
+  if (event.actionState != WorkerEventActionState.locked ||
+      event.ownTierOpensAt == null) {
+    return '';
+  }
+  final remaining = timeUntilTierOpens(
+    opensAt: event.ownTierOpensAt!,
+    now: DateTime.now().toUtc(),
+  );
+  if (remaining == Duration.zero) return ' · refresh to apply';
+  final hours = remaining.inHours;
+  final minutes = remaining.inMinutes.remainder(60);
+  return ' · your tier opens in ${hours}h ${minutes}m';
 }

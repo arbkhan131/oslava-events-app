@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../auth/data/profile_photo_preparer.dart';
 import '../data/worker_repository.dart';
 import '../domain/worker_profile.dart';
 import 'worker_profile_screen.dart';
@@ -27,6 +31,10 @@ class _EditWorkerProfileScreenState
   bool _hasPreviousExperience = false;
   bool _loaded = false;
   bool _saving = false;
+  Uint8List? _photoBytes;
+  String? _photoMimeType;
+  String? _photoName;
+  String? _message;
 
   @override
   void dispose() {
@@ -112,6 +120,26 @@ class _EditWorkerProfileScreenState
                     ),
                     maxLines: 3,
                   ),
+                  const SizedBox(height: 12),
+                  if (_photoBytes != null)
+                    Image.memory(
+                      _photoBytes!,
+                      height: 120,
+                      semanticLabel: 'Selected profile photo',
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _saving ? null : () => _pickPhoto(worker),
+                    icon: const Icon(Icons.photo_camera),
+                    label: Text(
+                      _photoName == null
+                          ? 'Replace profile photo'
+                          : 'Photo ready',
+                    ),
+                  ),
+                  if (_message != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_message!),
+                  ],
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: _saving ? null : () => _save(worker),
@@ -127,6 +155,39 @@ class _EditWorkerProfileScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _pickPhoto(WorkerProfile worker) async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (picked == null) return;
+      final mimeType = picked.mimeType ?? _mimeTypeFromName(picked.name);
+      final prepared = const ProfilePhotoPreparer().prepare(
+        userId: worker.userId,
+        sourceBytes: await picked.readAsBytes(),
+        mimeType: mimeType,
+      );
+      if (mounted) {
+        setState(() {
+          _photoBytes = prepared.bytes;
+          _photoMimeType = prepared.mimeType;
+          _photoName = picked.name;
+          _message = 'Photo selected. Save to update your profile.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _message = error.toString());
+    }
+  }
+
+  String _mimeTypeFromName(String name) {
+    final lowerName = name.toLowerCase();
+    if (lowerName.endsWith('.png')) return 'image/png';
+    if (lowerName.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
   }
 
   void _loadOnce(WorkerProfile worker) {
@@ -158,21 +219,33 @@ class _EditWorkerProfileScreenState
 
     setState(() => _saving = true);
     try {
-      await ref
-          .read(workerRepositoryProvider)
-          .updateOwnProfile(
-            WorkerProfileUpdate(
-              fullName: _fullName.text,
-              initials: _initials.text,
-              address: _address.text,
-              nativePlace: _nativePlace.text,
-              heightCm: double.parse(_height.text),
-              educationStatus: _education.text,
-              hasPreviousExperience: _hasPreviousExperience,
-              experienceDetails: _experienceDetails.text,
-              profilePhotoPath: worker.profilePhotoPath,
-            ),
-          );
+      final update = WorkerProfileUpdate(
+        fullName: _fullName.text,
+        initials: _initials.text,
+        address: _address.text,
+        nativePlace: _nativePlace.text,
+        heightCm: double.parse(_height.text),
+        educationStatus: _education.text,
+        hasPreviousExperience: _hasPreviousExperience,
+        experienceDetails: _experienceDetails.text,
+        profilePhotoPath: worker.profilePhotoPath,
+      );
+      final photoBytes = _photoBytes;
+      final photoMimeType = _photoMimeType;
+      if (photoBytes == null || photoMimeType == null) {
+        await ref.read(workerRepositoryProvider).updateOwnProfile(update);
+      } else {
+        await ref
+            .read(workerRepositoryProvider)
+            .replaceOwnProfilePhoto(
+              storagePath:
+                  '${worker.userId}/profile-${DateTime.now().millisecondsSinceEpoch}.jpg',
+              bytes: photoBytes,
+              mimeType: photoMimeType,
+              oldStoragePath: worker.profilePhotoPath,
+              currentProfile: update,
+            );
+      }
       ref.invalidate(ownWorkerProfileProvider);
       if (mounted) {
         context.go('/worker/profile');

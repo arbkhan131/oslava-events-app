@@ -62,6 +62,18 @@ enum AppRole {
         return false;
     }
   }
+
+  bool get canChangeWorkerCategory {
+    switch (this) {
+      case AppRole.superAdmin:
+      case AppRole.admin:
+      case AppRole.captain:
+      case AppRole.supervisor:
+        return true;
+      case AppRole.worker:
+        return false;
+    }
+  }
 }
 
 extension AppRoleParsing on AppRole {
@@ -103,11 +115,18 @@ class AppSession {
     required this.userId,
     required this.role,
     required this.displayName,
+    this.accountStatus = 'ACTIVE',
+    this.profileComplete = true,
+    this.workerNumber,
   });
 
   final String userId;
   final AppRole role;
   final String displayName;
+  final String accountStatus;
+  final bool profileComplete;
+  final int? workerNumber;
+  bool get isRestricted => accountStatus != 'ACTIVE';
 }
 
 final authSessionProvider = Provider<AppSession?>((ref) => null);
@@ -123,8 +142,24 @@ final derivedAuthSessionProvider = Provider<AppSession?>(
 class AuthSessionController extends ChangeNotifier {
   AppSession? _session;
   bool _hasBootstrapped = false;
+  int _generation = 0;
+  bool loading = true;
+  bool refreshing = false;
+  bool _authFlowInProgress = false;
+  String? error;
 
   AppSession? get session => _session;
+  bool get authFlowInProgress => _authFlowInProgress;
+
+  void setAuthFlowInProgress(bool value) {
+    if (_authFlowInProgress == value) return;
+    _authFlowInProgress = value;
+    if (value) {
+      _generation++;
+      refreshing = false;
+    }
+    notifyListeners();
+  }
 
   Future<void> bootstrap(Future<AppSession?> Function() loadSession) async {
     if (_hasBootstrapped) {
@@ -132,16 +167,45 @@ class AuthSessionController extends ChangeNotifier {
     }
 
     _hasBootstrapped = true;
-    _session = await loadSession();
-    notifyListeners();
+    await refresh(loadSession);
+  }
+
+  Future<void> refresh(Future<AppSession?> Function() loadSession) async {
+    if (_authFlowInProgress || refreshing) return;
+    final generation = ++_generation;
+    refreshing = true;
+    try {
+      final session = await loadSession();
+      if (generation != _generation) return;
+      _session = session;
+      error = null;
+    } catch (_) {
+      if (generation != _generation) return;
+      _session = null;
+      error = 'Could not verify your account. Check your connection and retry.';
+    } finally {
+      if (generation == _generation) {
+        refreshing = false;
+        loading = false;
+        notifyListeners();
+      }
+    }
   }
 
   void setSession(AppSession session) {
+    _generation++;
+    loading = false;
+    refreshing = false;
+    error = null;
     _session = session;
     notifyListeners();
   }
 
   void clear() {
+    _generation++;
+    refreshing = false;
+    loading = false;
+    error = null;
     _session = null;
     notifyListeners();
   }

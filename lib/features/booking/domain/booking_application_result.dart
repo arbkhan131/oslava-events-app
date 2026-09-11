@@ -62,6 +62,7 @@ class BookingApplicationResult {
   final String? assignmentId;
 
   bool get isConfirmed => status == BookingResultStatus.confirmed;
+  bool get isPending => status == BookingResultStatus.pending;
 
   static BookingApplicationResult fromJson(Map<String, dynamic> json) {
     return BookingApplicationResult(
@@ -100,6 +101,7 @@ String bookingResultMessage(BookingApplicationResult result) {
           ? 'Late booking acknowledgement is required.'
           : 'Application could not be completed.';
     case BookingResultStatus.pending:
+      return 'Application received. Checking the final seat. You are not confirmed yet.';
     case BookingResultStatus.full:
     case BookingResultStatus.waitlisted:
       return result.status.name;

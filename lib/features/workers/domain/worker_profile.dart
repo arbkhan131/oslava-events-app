@@ -24,6 +24,26 @@ enum WorkerCategory {
   }
 
   String get databaseValue => name.toUpperCase();
+  String get label => databaseValue;
+
+  int get rank {
+    switch (this) {
+      case WorkerCategory.a:
+        return 1;
+      case WorkerCategory.b:
+        return 2;
+      case WorkerCategory.c:
+        return 3;
+      case WorkerCategory.f:
+        return 4;
+    }
+  }
+
+  List<WorkerCategory> get oneStepOptions {
+    return WorkerCategory.values
+        .where((category) => (category.rank - rank).abs() == 1)
+        .toList(growable: false);
+  }
 }
 
 enum AccountStatus {
@@ -31,7 +51,9 @@ enum AccountStatus {
   suspended,
   detained,
   blacklisted,
-  inactive;
+  inactive,
+  pendingApproval,
+  rejected;
 
   static AccountStatus fromDatabase(String value) {
     switch (value) {
@@ -45,12 +67,88 @@ enum AccountStatus {
         return AccountStatus.blacklisted;
       case 'INACTIVE':
         return AccountStatus.inactive;
+      case 'PENDING_APPROVAL':
+        return AccountStatus.pendingApproval;
+      case 'REJECTED':
+        return AccountStatus.rejected;
       default:
         throw FormatException('Unknown account status "$value".');
     }
   }
 
-  String get databaseValue => name.toUpperCase();
+  String get databaseValue {
+    switch (this) {
+      case AccountStatus.active:
+        return 'ACTIVE';
+      case AccountStatus.suspended:
+        return 'SUSPENDED';
+      case AccountStatus.detained:
+        return 'DETAINED';
+      case AccountStatus.blacklisted:
+        return 'BLACKLISTED';
+      case AccountStatus.inactive:
+        return 'INACTIVE';
+      case AccountStatus.pendingApproval:
+        return 'PENDING_APPROVAL';
+      case AccountStatus.rejected:
+        return 'REJECTED';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case AccountStatus.active:
+        return 'Active';
+      case AccountStatus.suspended:
+        return 'Suspended';
+      case AccountStatus.detained:
+        return 'Detained';
+      case AccountStatus.blacklisted:
+        return 'Blacklisted';
+      case AccountStatus.inactive:
+        return 'Inactive';
+      case AccountStatus.pendingApproval:
+        return 'Pending approval';
+      case AccountStatus.rejected:
+        return 'Rejected';
+    }
+  }
+}
+
+class WorkerDirectoryQuery {
+  const WorkerDirectoryQuery({
+    this.searchText,
+    this.accountStatus,
+    this.category,
+    this.limit = 50,
+    this.offset = 0,
+  });
+
+  final String? searchText;
+  final AccountStatus? accountStatus;
+  final WorkerCategory? category;
+  final int limit;
+  final int offset;
+
+  WorkerDirectoryQuery copyWith({
+    String? searchText,
+    AccountStatus? accountStatus,
+    WorkerCategory? category,
+    int? limit,
+    int? offset,
+    bool clearAccountStatus = false,
+    bool clearCategory = false,
+  }) {
+    return WorkerDirectoryQuery(
+      searchText: searchText ?? this.searchText,
+      accountStatus: clearAccountStatus
+          ? null
+          : accountStatus ?? this.accountStatus,
+      category: clearCategory ? null : category ?? this.category,
+      limit: limit ?? this.limit,
+      offset: offset ?? this.offset,
+    );
+  }
 }
 
 class WorkerProfile {
@@ -66,6 +164,17 @@ class WorkerProfile {
     this.profilePhotoPath,
     this.category,
     this.reliabilityScore,
+    this.reliabilityState = ReliabilityState.provisional,
+    this.reliabilitySampleCount = 0,
+    this.reliabilityPresentCount = 0,
+    this.reliabilityLateCount = 0,
+    this.reliabilityAbsentCount = 0,
+    this.reliabilityWorkerCancellationCount = 0,
+    this.reliabilityCompletedEventCount = 0,
+    this.reliabilityPerformanceEventCount = 0,
+    this.reliabilityPerformanceAverage,
+    this.reliabilityConfigVersion,
+    this.reliabilityComputedAt,
     this.profileCompletedAt,
     this.dateOfBirth,
     this.address,
@@ -87,6 +196,17 @@ class WorkerProfile {
   final WorkerCategory? category;
   final WorkerCategory lastWorkerCategory;
   final double? reliabilityScore;
+  final ReliabilityState reliabilityState;
+  final int reliabilitySampleCount;
+  final int reliabilityPresentCount;
+  final int reliabilityLateCount;
+  final int reliabilityAbsentCount;
+  final int reliabilityWorkerCancellationCount;
+  final int reliabilityCompletedEventCount;
+  final int reliabilityPerformanceEventCount;
+  final double? reliabilityPerformanceAverage;
+  final int? reliabilityConfigVersion;
+  final DateTime? reliabilityComputedAt;
   final DateTime? profileCompletedAt;
   final DateTime? dateOfBirth;
   final String? address;
@@ -101,6 +221,7 @@ class WorkerProfile {
   static WorkerProfile fromJson(Map<String, dynamic> json) {
     final workerNumberValue = json['worker_number'];
     final reliabilityValue = json['reliability_score'];
+    final performanceAverageValue = json['reliability_performance_average'];
     final heightValue = json['height_cm'];
 
     return WorkerProfile(
@@ -123,6 +244,31 @@ class WorkerProfile {
       reliabilityScore: reliabilityValue == null
           ? null
           : (reliabilityValue as num).toDouble(),
+      reliabilityState: ReliabilityState.fromDatabase(
+        json['reliability_state'] as String? ?? 'PROVISIONAL',
+      ),
+      reliabilitySampleCount:
+          (json['reliability_sample_count'] as num?)?.toInt() ?? 0,
+      reliabilityPresentCount:
+          (json['reliability_present_count'] as num?)?.toInt() ?? 0,
+      reliabilityLateCount:
+          (json['reliability_late_count'] as num?)?.toInt() ?? 0,
+      reliabilityAbsentCount:
+          (json['reliability_absent_count'] as num?)?.toInt() ?? 0,
+      reliabilityWorkerCancellationCount:
+          (json['reliability_worker_cancellation_count'] as num?)?.toInt() ?? 0,
+      reliabilityCompletedEventCount:
+          (json['reliability_completed_event_count'] as num?)?.toInt() ?? 0,
+      reliabilityPerformanceEventCount:
+          (json['reliability_performance_event_count'] as num?)?.toInt() ?? 0,
+      reliabilityPerformanceAverage: performanceAverageValue == null
+          ? null
+          : (performanceAverageValue as num).toDouble(),
+      reliabilityConfigVersion: (json['reliability_config_version'] as num?)
+          ?.toInt(),
+      reliabilityComputedAt: json['reliability_computed_at'] == null
+          ? null
+          : DateTime.parse(json['reliability_computed_at'] as String),
       profileCompletedAt: json['profile_completed_at'] == null
           ? null
           : DateTime.parse(json['profile_completed_at'] as String),
@@ -136,6 +282,40 @@ class WorkerProfile {
       hasPreviousExperience: json['has_previous_experience'] as bool?,
       experienceDetails: json['experience_details'] as String?,
     );
+  }
+}
+
+enum ReliabilityState {
+  provisional,
+  rated;
+
+  static ReliabilityState fromDatabase(String value) {
+    switch (value) {
+      case 'PROVISIONAL':
+        return ReliabilityState.provisional;
+      case 'RATED':
+        return ReliabilityState.rated;
+      default:
+        throw FormatException('Unknown reliability state "$value".');
+    }
+  }
+
+  String get databaseValue {
+    switch (this) {
+      case ReliabilityState.provisional:
+        return 'PROVISIONAL';
+      case ReliabilityState.rated:
+        return 'RATED';
+    }
+  }
+
+  String label(int sampleCount) {
+    switch (this) {
+      case ReliabilityState.provisional:
+        return 'Provisional - $sampleCount of 3 commitments';
+      case ReliabilityState.rated:
+        return 'Rated';
+    }
   }
 }
 
@@ -169,6 +349,30 @@ class WorkerHistoryEntry {
           : AppRoleParsing.fromDatabase(json['actor_role'] as String),
       reason: json['reason'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+class WorkerCategoryChangeResult {
+  const WorkerCategoryChangeResult({
+    required this.workerId,
+    required this.oldCategory,
+    required this.newCategory,
+  });
+
+  final String workerId;
+  final WorkerCategory oldCategory;
+  final WorkerCategory newCategory;
+
+  static WorkerCategoryChangeResult fromJson(Map<String, dynamic> json) {
+    return WorkerCategoryChangeResult(
+      workerId: json['worker_id'] as String,
+      oldCategory: WorkerCategory.fromDatabase(
+        json['old_category'] as String?,
+      )!,
+      newCategory: WorkerCategory.fromDatabase(
+        json['new_category'] as String?,
+      )!,
     );
   }
 }
@@ -207,4 +411,122 @@ class WorkerProfileUpdate {
     'p_experience_details': experienceDetails,
     'p_profile_photo_path': profilePhotoPath,
   };
+}
+
+class StaffProfile {
+  const StaffProfile({
+    required this.userId,
+    required this.fullName,
+    required this.initials,
+    required this.phoneE164,
+    required this.role,
+    required this.accountStatus,
+    this.profileCompletedAt,
+  });
+
+  final String userId;
+  final String fullName;
+  final String initials;
+  final String phoneE164;
+  final AppRole role;
+  final AccountStatus accountStatus;
+  final DateTime? profileCompletedAt;
+
+  static StaffProfile fromJson(Map<String, dynamic> json) {
+    return StaffProfile(
+      userId: json['user_id'] as String,
+      fullName: json['full_name'] as String,
+      initials: json['initials'] as String,
+      phoneE164: json['phone_e164'] as String,
+      role: AppRoleParsing.fromDatabase(json['role'] as String),
+      accountStatus: AccountStatus.fromDatabase(
+        json['account_status'] as String,
+      ),
+      profileCompletedAt: json['profile_completed_at'] == null
+          ? null
+          : DateTime.parse(json['profile_completed_at'] as String),
+    );
+  }
+}
+
+class StaffProvisionRequest {
+  const StaffProvisionRequest({
+    required this.fullName,
+    required this.initials,
+    required this.email,
+    required this.phoneE164,
+    required this.password,
+    required this.role,
+    required this.reason,
+  });
+
+  final String fullName;
+  final String initials;
+  final String email;
+  final String phoneE164;
+  final String password;
+  final AppRole role;
+  final String reason;
+
+  Map<String, dynamic> toFunctionBody() => {
+    'action': 'provision_staff',
+    'email': email.trim().toLowerCase(),
+    'phone': phoneE164,
+    'password': password,
+    'full_name': fullName,
+    'initials': initials,
+    'role': role.databaseValue,
+    'reason': reason,
+  };
+}
+
+class ErasureRequestStatus {
+  const ErasureRequestStatus({
+    required this.id,
+    required this.status,
+    required this.verificationStatus,
+    required this.dueAt,
+    required this.createdAt,
+    required this.photoCleanupStatus,
+    this.completedAt,
+    this.completionNotes,
+  });
+
+  final String id;
+  final String status;
+  final String verificationStatus;
+  final DateTime dueAt;
+  final DateTime createdAt;
+  final String photoCleanupStatus;
+  final DateTime? completedAt;
+  final String? completionNotes;
+
+  static ErasureRequestStatus fromJson(Map<String, dynamic> json) {
+    return ErasureRequestStatus(
+      id: json['request_id'] as String,
+      status: json['status'] as String,
+      verificationStatus: json['verification_status'] as String,
+      dueAt: DateTime.parse(json['due_at'] as String),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      photoCleanupStatus: json['photo_cleanup_status'] as String,
+      completedAt: json['completed_at'] == null
+          ? null
+          : DateTime.parse(json['completed_at'] as String),
+      completionNotes: json['completion_notes'] as String?,
+    );
+  }
+
+  bool get isOpen =>
+      status == 'OPEN' || status == 'VERIFIED' || status == 'LEGAL_HOLD';
+
+  String get label {
+    if (status == 'COMPLETED') return 'Completed';
+    if (status == 'REJECTED') return 'Rejected';
+    if (status == 'LEGAL_HOLD') return 'Paused for legal hold';
+    if (verificationStatus == 'PENDING_VERIFICATION') {
+      return 'Pending verification';
+    }
+    if (status == 'VERIFIED') return 'Verified, due for fulfillment';
+    return status;
+  }
 }

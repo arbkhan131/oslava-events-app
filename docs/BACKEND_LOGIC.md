@@ -30,9 +30,10 @@ Proposed sequence after Phase 0 selects the Auth adapter:
 4. In the profile-creation transaction, allocate the next numeric Worker ID from a sequence.
 5. Insert `profiles` as role Worker and state ACTIVE.
 6. Insert `worker_profiles` as category F.
-7. Write registration audit metadata.
-8. Return the numeric Worker ID and an authenticated session/continuation.
-9. If Auth and profile creation cannot share one transaction, use explicit compensation and a retry-safe registration record so neither orphan is silently retained.
+7. Require the active Privacy Notice and Terms version, then insert the acknowledgement row with user ID, version, and server timestamp.
+8. Write registration audit metadata.
+9. Return the numeric Worker ID and an authenticated session/continuation.
+10. If Auth and profile creation cannot share one transaction, use explicit compensation and a retry-safe registration record so neither orphan is silently retained.
 
 ### Login by identifier
 
@@ -138,9 +139,13 @@ Database uniqueness and capacity tests are the final backstop. A displayed vacan
 
 ### Cross-tier final-seat arbitration
 
-The finalized Phase 9 rule treats final-seat requests received within the same one-second arbitration window as competing. The server stores pending `booking_requests`, waits for the window to close, then allocates by category rank A>B>C>F, earliest trusted `server_received_at` inside the same category, then request UUID only as a deterministic final tie-breaker.
+The finalized Phase 9 rule treats final-seat requests received within the same one-second arbitration window as competing. R2 implements this as separate committed intake and allocation transactions: `apply_for_event` records the request and returns `PENDING` immediately; resolution after the cutoff allocates by category rank A>B>C>F, earliest trusted `server_received_at` inside the same category, then request UUID only as a deterministic final tie-breaker. No allocation lock is held while waiting for the window to elapse.
 
 Requests outside the active one-second window do not compete with that window. Losing valid contenders receive `WAITLIST_AVAILABLE`; they are not automatically waitlisted.
+
+Each contender retains its own acknowledgement IDs, accepted event version and late-cancellation consent. The resolver revalidates current eligibility, consent/version, conflicts, event/reporting time and capacity before creating an assignment. Booking and related mutations use a common transaction-lock order to prevent conflicting confirmations across events and Apply/promotion races. Trusted receipt time is stamped at server admission under that short lock; clients cannot supply it.
+
+`get_booking_result(request_id)` and `resolve_booking_request(idempotency_key)` are authenticated, own-request resolution paths. The client polls briefly and preserves `PENDING` if a final outcome is unavailable. A dedicated one-second `oslava-booking-resolution` job invokes service-only `process_due_booking_windows(32)` for abandoned requests; it is independent of notification scheduling. Same-key retries return the stored result; changed payloads for new-format requests are rejected. See [R2 evidence and migration details](A:/Dev/oslava_events/docs/READINESS_R2_REPORT.md).
 
 ## Waitlist functions
 
@@ -252,7 +257,25 @@ Insert one `notifications` row per recipient with a deterministic deduplication 
 4. Mark success, retryable failure with backoff, or permanent failure.
 5. Retire invalid tokens and release expired claims.
 
-Scheduled reporting reminders use backend time and deduplication keys. Reminder lead times are an unresolved product setting.
+Scheduled reporting reminders use backend time, deterministic deduplication keys, and the approved 24-hour and 2-hour lead times. Expired reminder windows are skipped.
+
+## Production hardening operations
+
+### Privacy/terms acknowledgement
+
+`complete_worker_registration` must reject Worker profile completion unless the caller supplies the current active Privacy Notice and Terms version. The database records the authenticated user, acknowledged version, and server timestamp. The client may display the notice text and collect acknowledgement, but the server remains authoritative for the accepted version.
+
+### Verified erasure request
+
+`request_account_erasure(target_user_id, reason)` is an Admin/Super Admin governance action after manual identity verification. It immediately sets the target profile to `INACTIVE`, writes an erasure-request row with a 30-day due date, and appends audit history. Follow-up PII/photo deletion and operational-history anonymization must use controlled server-side migrations/functions so staffing, event, dispute, legal-hold, and audit integrity are preserved.
+
+### Retention cleanup
+
+`run_retention_cleanup(dry_run)` is limited to Super Admin or service-role execution. Dry runs report counts only. Live runs delete expired in-app notifications, terminal delivery attempts, invalidated device tokens, and expired audit logs that are not under legal hold. Every run writes a cleanup ledger row and audit log. The function is idempotent so scheduled or retried cleanup cannot create duplicate side effects.
+
+### Backup, restore, and incident response
+
+Production backup/restore and incident handling are operational runbook responsibilities, not Flutter features. Secrets remain outside Git; restoring production requires database, Storage, Edge Function/config, Firebase/FCM, and Supabase Auth configuration recovery. Incident response follows detect, contain, preserve evidence, assess scope, recover, verify, communicate, and post-review.
 
 ## Event lifecycle
 

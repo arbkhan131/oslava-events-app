@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(64);
 
 select has_table('public', 'events', 'events table exists');
 select has_table('public', 'event_leaders', 'event leaders table exists');
@@ -64,6 +64,8 @@ select has_function('public', 'publish_event', array['uuid', 'text'], 'publish e
 select has_function('public', 'cancel_event', array['uuid', 'text'], 'cancel event RPC exists');
 select has_function('public', 'complete_event', array['uuid', 'text'], 'complete event RPC exists');
 select has_function('public', 'close_event', array['uuid', 'text'], 'close event RPC exists');
+select has_function('public', 'admin_event_detail', array['uuid'], 'admin event detail RPC exists');
+select has_function('public', 'admin_event_dashboard', array[]::text[], 'admin event dashboard RPC exists');
 select has_function(
   'public',
   'process_event_lifecycle_transitions',
@@ -166,6 +168,20 @@ values
     false,
     now(),
     now()
+  ),
+  (
+    '00000000-0000-0000-0000-000000005006',
+    'authenticated',
+    'authenticated',
+    '+919876545006',
+    crypt('worker-password', gen_salt('bf')),
+    now(),
+    '{"provider":"phone","providers":["phone"]}',
+    '{}',
+    false,
+    false,
+    now(),
+    now()
   );
 
 select set_config('app.bypass_identity_protection', 'on', true);
@@ -188,17 +204,29 @@ insert into public.profiles (
   profile_completed_at,
   account_status
 )
-values (
-  '00000000-0000-0000-0000-000000005005',
-  nextval('public.worker_number_seq'),
-  'WORKER',
-  'Worker Five',
-  'WF',
-  '+919876545005',
-  '00000000-0000-0000-0000-000000005005/profile.webp',
-  now(),
-  'ACTIVE'
-);
+values
+  (
+    '00000000-0000-0000-0000-000000005005',
+    nextval('public.worker_number_seq'),
+    'WORKER',
+    'Worker Five',
+    'WF',
+    '+919876545005',
+    '00000000-0000-0000-0000-000000005005/profile.webp',
+    now(),
+    'ACTIVE'
+  ),
+  (
+    '00000000-0000-0000-0000-000000005006',
+    nextval('public.worker_number_seq'),
+    'WORKER',
+    'Worker Five Two',
+    'WT',
+    '+919876545006',
+    '00000000-0000-0000-0000-000000005006/profile.webp',
+    now(),
+    'ACTIVE'
+  );
 
 insert into public.worker_profiles (
   user_id,
@@ -211,17 +239,29 @@ insert into public.worker_profiles (
   education_status,
   has_previous_experience
 )
-values (
-  '00000000-0000-0000-0000-000000005005',
-  'F',
-  'F',
-  (current_date - interval '20 years')::date,
-  'Pune',
-  'Pune',
-  170,
-  'College',
-  false
-);
+values
+  (
+    '00000000-0000-0000-0000-000000005005',
+    'F',
+    'F',
+    (current_date - interval '20 years')::date,
+    'Pune',
+    'Pune',
+    170,
+    'College',
+    false
+  ),
+  (
+    '00000000-0000-0000-0000-000000005006',
+    'F',
+    'F',
+    (current_date - interval '20 years')::date,
+    'Pune',
+    'Pune',
+    170,
+    'College',
+    false
+  );
 
 select set_config('app.bypass_identity_protection', 'off', true);
 
@@ -334,6 +374,30 @@ select is(
   (select amount from public.event_allowances where event_id = (select id from phase_5_created_event)),
   150::numeric,
   'event stores INR allowances'
+);
+
+select is(
+  (select jsonb_array_length(public.admin_event_detail((select id from phase_5_created_event))->'leaders')),
+  2,
+  'admin event detail returns active leaders'
+);
+
+select is(
+  (select public.admin_event_detail((select id from phase_5_created_event))->>'instructions'),
+  'Report at main gate',
+  'admin event detail returns instructions'
+);
+
+select is(
+  (select jsonb_array_length(public.admin_event_detail((select id from phase_5_created_event))->'requirements')),
+  1,
+  'admin event detail returns structured requirements'
+);
+
+select is(
+  (select (public.admin_event_detail((select id from phase_5_created_event))->>'confirmed_count')::integer),
+  0,
+  'admin event detail includes current confirmed count'
 );
 
 select is(
@@ -579,6 +643,46 @@ select is(
   'reporting time moves event to IN_PROGRESS'
 );
 
+insert into public.assignments (
+  event_id,
+  worker_id,
+  status,
+  source,
+  category_at_confirmation
+)
+values
+  ((select id from phase_5_due_event), '00000000-0000-0000-0000-000000005005', 'CONFIRMED', 'MANAGEMENT', 'F'),
+  ((select id from phase_5_due_event), '00000000-0000-0000-0000-000000005006', 'CONFIRMED', 'MANAGEMENT', 'F');
+
+select throws_ok(
+  $$
+    select public.update_event(
+      (select id from phase_5_due_event),
+      (select version from public.events where id = (select id from phase_5_due_event)),
+      'Below Capacity',
+      'Corporate',
+      'Mumbai Venue',
+      null,
+      now() - interval '2 hours',
+      now() - interval '90 minutes',
+      now() + interval '4 hours',
+      1,
+      900,
+      'STANDARD',
+      null,
+      null,
+      '[]',
+      '[]',
+      '[]',
+      'Capacity reduction',
+      true
+    )
+  $$,
+  'P0001',
+  'capacity below confirmed assignments requires management removal workflow',
+  'capacity cannot be reduced below confirmed assignments'
+);
+
 select is(
   (select recruitment_status from public.events where id = (select id from phase_5_due_event)),
   'CLOSED'::public.recruitment_status,
@@ -692,6 +796,27 @@ select is(
   (select count(*) from public.admin_event_list()),
   5::bigint,
   'Admin event list returns managed events'
+);
+
+select cmp_ok(
+  (select today_event_count from public.admin_event_dashboard()),
+  '>=',
+  1,
+  'admin dashboard returns today event count'
+);
+
+select cmp_ok(
+  (select required_today_count from public.admin_event_dashboard()),
+  '>=',
+  5,
+  'admin dashboard returns required staffing count'
+);
+
+select cmp_ok(
+  (select vacant_today_count from public.admin_event_dashboard()),
+  '>=',
+  0,
+  'admin dashboard never returns negative vacancy'
 );
 
 select cmp_ok(

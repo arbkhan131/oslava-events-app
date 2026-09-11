@@ -1,0 +1,89 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_name:
+        description: "Version name, for example 1.0.0"
+        required: true
+        default: "1.0.0"
+      build_number:
+        description: "Version code, for example 1"
+        required: true
+        default: "1"
+
+jobs:
+  build-android-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore Android upload keystore
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_UPLOAD_KEYSTORE_BASE64"
+          mkdir -p "$RUNNER_TEMP/android-signing"
+          echo "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/android-signing/upload.jks"
+
+      - name: Write signing properties
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          printf '%s\n' \
+            "storeFile=$RUNNER_TEMP/android-signing/upload.jks" \
+            "storePassword=$ANDROID_KEYSTORE_PASSWORD" \
+            "keyAlias=$ANDROID_KEY_ALIAS" \
+            "keyPassword=$ANDROID_KEY_PASSWORD" \
+            > android/key.properties
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test -j 1
+
+      - name: Build signed Android App Bundle
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_ANON_KEY"
+          flutter build appbundle --release \
+            --build-name "${{ inputs.build_name }}" \
+            --build-number "${{ inputs.build_number }}" \
+            --dart-define=OSLAVA_ENV=production \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: oslava-events-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error

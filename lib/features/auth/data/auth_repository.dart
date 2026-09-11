@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../app/bootstrap.dart';
 import '../application/auth_session.dart';
 import '../domain/auth_failure.dart';
+import '../domain/email_address.dart';
 import '../domain/phone_number.dart';
 import '../domain/prepared_profile_photo.dart';
 import '../domain/worker_registration_input.dart';
@@ -19,6 +20,17 @@ final authRepositoryProvider = Provider<AuthRepository>(
 );
 
 abstract interface class AuthRepository {
+  Stream<void> get sessionChanges;
+  String? get registrationEmail;
+  String? get registrationPhone;
+  Map<String, dynamic> get registrationDraft;
+  Future<Map<String, dynamic>> loadPrivacyTerms();
+  Future<void> verifyRegistrationOtp(String otp);
+  Future<void> resendRegistrationOtp();
+  Future<AppSession> signInWithEmailPassword({
+    required EmailAddress email,
+    required String password,
+  });
   Future<AppSession> signInWithPhonePassword({
     required PhoneNumber phone,
     required String password,
@@ -28,15 +40,18 @@ abstract interface class AuthRepository {
     required WorkerRegistrationInput input,
     required Uint8List profilePhotoBytes,
     required String profilePhotoMimeType,
+    required Uint8List idCardBytes,
+    required String idCardFileName,
+    required String idCardMimeType,
   });
 
   Future<void> startPasswordRecovery({
-    required PhoneNumber phone,
+    required EmailAddress email,
     required String environmentName,
   });
 
   Future<void> verifyRecoveryOtpAndSetPassword({
-    required PhoneNumber phone,
+    required EmailAddress email,
     required String otp,
     required String newPassword,
   });
@@ -47,10 +62,75 @@ abstract interface class AuthRepository {
 }
 
 class SupabaseAuthRepository implements AuthRepository {
-  const SupabaseAuthRepository(this._client, this._photoPreparer);
+  SupabaseAuthRepository(this._client, this._photoPreparer);
 
   final SupabaseClient _client;
   final ProfilePhotoPreparer _photoPreparer;
+  String? _confirmationEmail;
+  @override
+  Stream<void> get sessionChanges => _client.auth.onAuthStateChange.map((_) {});
+
+  @override
+  String? get registrationEmail {
+    final email = _confirmationEmail ?? _client.auth.currentUser?.email;
+    return email == null || email.isEmpty ? null : email;
+  }
+
+  @override
+  String? get registrationPhone {
+    final draftPhone = registrationDraft['phone_e164'] as String?;
+    return draftPhone == null || draftPhone.isEmpty ? null : draftPhone;
+  }
+
+  @override
+  Map<String, dynamic> get registrationDraft => Map<String, dynamic>.from(
+    _client.auth.currentUser?.userMetadata?['registration_draft'] as Map? ?? {},
+  );
+
+  @override
+  Future<Map<String, dynamic>> loadPrivacyTerms() async =>
+      Map<String, dynamic>.from(
+        await _client
+            .from('privacy_terms_versions')
+            .select('version,summary,published_at')
+            .eq('is_active', true)
+            .single(),
+      );
+
+  @override
+  Future<void> verifyRegistrationOtp(String otp) async {
+    throw const AuthFailure(
+      'Verification codes are not used. Sign in with your WhatsApp number and password.',
+    );
+  }
+
+  @override
+  Future<void> resendRegistrationOtp() async {
+    throw const AuthFailure(
+      'Verification codes are not used. Sign in with your WhatsApp number and password.',
+    );
+  }
+
+  @override
+  Future<AppSession> signInWithEmailPassword({
+    required EmailAddress email,
+    required String password,
+  }) async {
+    try {
+      await _client.auth.signInWithPassword(
+        email: email.value,
+        password: password,
+      );
+    } on AuthException catch (error) {
+      if (error.code == 'email_not_confirmed') {
+        _confirmationEmail = email.value;
+        throw const PhoneConfirmationRequired();
+      }
+      rethrow;
+    }
+
+    return _loadCurrentProfile();
+  }
 
   @override
   Future<AppSession> signInWithPhonePassword({
@@ -58,10 +138,9 @@ class SupabaseAuthRepository implements AuthRepository {
     required String password,
   }) async {
     await _client.auth.signInWithPassword(
-      phone: phone.value,
+      email: phone.authEmail,
       password: password,
     );
-
     return _loadCurrentProfile();
   }
 
@@ -70,82 +149,155 @@ class SupabaseAuthRepository implements AuthRepository {
     required WorkerRegistrationInput input,
     required Uint8List profilePhotoBytes,
     required String profilePhotoMimeType,
+    required Uint8List idCardBytes,
+    required String idCardFileName,
+    required String idCardMimeType,
   }) async {
     input.validate();
-
-    final authResponse = await _client.auth.signUp(
-      phone: input.phone.value,
-      password: input.password,
-    );
-
-    final userId = authResponse.user?.id;
-    if (userId == null) {
-      throw const AuthFailure('Registration did not return a user.');
+    if (idCardBytes.isEmpty) {
+      throw const FormatException('ID card file is required.');
     }
 
-    final photo = _photoPreparer.prepare(
-      userId: userId,
-      sourceBytes: profilePhotoBytes,
-      mimeType: profilePhotoMimeType,
+    final prepared =
+        profilePhotoBytes.isEmpty && registrationDraft['photo_ready'] == true
+        ? null
+        : _photoPreparer.prepare(
+            userId: 'validated',
+            sourceBytes: profilePhotoBytes,
+            mimeType: profilePhotoMimeType,
+          );
+    final draft = {...input.toRpcParams()}
+      ..remove('profile_photo_path')
+      ..remove('id_card_file_path');
+
+    await _ensurePhoneAuthSession(input);
+
+    final user = _client.auth.currentUser!;
+    if (user.email != input.phone.authEmail) {
+      throw const AuthFailure(
+        'Sign out before registering a different WhatsApp number.',
+      );
+    }
+
+    final existing = await _loadCurrentProfile();
+    if (existing.profileComplete) {
+      return existing;
+    }
+
+    final userId = user.id;
+    final photoPath = '$userId/profile.jpg';
+    final idCardPath = '$userId/${_safeStorageFileName(idCardFileName)}';
+    final photo = prepared == null
+        ? null
+        : PreparedProfilePhoto(
+            bytes: prepared.bytes,
+            mimeType: prepared.mimeType,
+            storagePath: photoPath,
+          );
+
+    await _client.auth.updateUser(
+      UserAttributes(
+        data: {
+          'registration_draft': {
+            ...draft,
+            if (registrationDraft['photo_ready'] == true) 'photo_ready': true,
+          },
+        },
+      ),
+    );
+    if (photo != null) await _uploadProfilePhoto(photo);
+    await _uploadIdCard(
+      storagePath: idCardPath,
+      bytes: idCardBytes,
+      mimeType: idCardMimeType,
+    );
+    await _client.auth.updateUser(
+      UserAttributes(
+        data: {
+          'registration_draft': {
+            ...draft,
+            'photo_ready': true,
+            'id_card_ready': true,
+          },
+        },
+      ),
     );
 
-    await _uploadProfilePhoto(photo);
-
     final rpcInput = WorkerRegistrationInput(
+      registrationType: input.registrationType,
       fullName: input.fullName,
-      initials: input.initials,
       phone: input.phone,
       password: input.password,
-      profilePhotoPath: photo.storagePath,
+      profilePhotoPath: photoPath,
+      idCardFilePath: idCardPath,
       dateOfBirth: input.dateOfBirth,
-      address: input.address,
-      nativePlace: input.nativePlace,
+      place: input.place,
       heightCm: input.heightCm,
       educationStatus: input.educationStatus,
-      hasPreviousExperience: input.hasPreviousExperience,
-      experienceDetails: input.experienceDetails,
+      experienceLevel: input.experienceLevel,
+      requestedCategory: input.requestedCategory,
+      privacyTermsVersion: input.privacyTermsVersion,
     );
 
     await _client.rpc(
-      'complete_worker_registration',
+      'complete_phone_worker_registration',
       params: rpcInput.toRpcParams(),
     );
-
+    try {
+      await _client.auth.updateUser(
+        UserAttributes(data: {'registration_draft': null}),
+      );
+    } catch (_) {}
     return _loadCurrentProfile();
+  }
+
+  Future<void> _ensurePhoneAuthSession(WorkerRegistrationInput input) async {
+    if (_client.auth.currentSession != null) {
+      return;
+    }
+
+    final response = await _client.functions.invoke(
+      'create-worker-phone-account',
+      body: {'phone': input.phone.value, 'password': input.password},
+    );
+    if (response.status >= 400) {
+      final data = response.data;
+      if (data is Map && data['error'] is String) {
+        throw AuthFailure(data['error'] as String);
+      }
+      throw const AuthFailure('Registration could not be started.');
+    }
+
+    await _client.auth.signInWithPassword(
+      email: input.phone.authEmail,
+      password: input.password,
+    );
   }
 
   @override
   Future<void> startPasswordRecovery({
-    required PhoneNumber phone,
+    required EmailAddress email,
     required String environmentName,
   }) async {
-    await _client.rpc(
-      'start_password_recovery',
-      params: {
-        'recovery_phone_e164': phone.value,
-        'provider_environment': environmentName,
-      },
-    );
-
-    await _client.auth.signInWithOtp(phone: phone.value);
+    await _client.auth.resetPasswordForEmail(email.value);
   }
 
   @override
   Future<void> verifyRecoveryOtpAndSetPassword({
-    required PhoneNumber phone,
+    required EmailAddress email,
     required String otp,
     required String newPassword,
   }) async {
-    await _client.auth.verifyOTP(
-      phone: phone.value,
-      token: otp,
-      type: OtpType.sms,
+    throw const AuthFailure(
+      'Open the reset link from your email to set a new password.',
     );
-    await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
   @override
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() async {
+    _confirmationEmail = null;
+    await _client.auth.signOut(scope: SignOutScope.local);
+  }
 
   @override
   Future<AppSession?> loadCurrentSession() async {
@@ -166,14 +318,49 @@ class SupabaseAuthRepository implements AuthRepository {
         );
   }
 
+  Future<void> _uploadIdCard({
+    required String storagePath,
+    required Uint8List bytes,
+    required String mimeType,
+  }) {
+    return _client.storage
+        .from('worker-id-cards')
+        .uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: FileOptions(contentType: mimeType, upsert: true),
+        );
+  }
+
+  String _safeStorageFileName(String name) {
+    final trimmed = name.trim().isEmpty ? 'id-card' : name.trim();
+    final cleaned = trimmed.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return '$timestamp-$cleaned';
+  }
+
   Future<AppSession> _loadCurrentProfile() async {
-    final response = await _client.rpc('my_profile').single();
+    final userId = _client.auth.currentUser!.id;
+    final response = await _client.rpc('my_profile').maybeSingle();
+    if (_client.auth.currentUser?.id != userId) {
+      throw const AuthFailure('Your account changed. Please retry.');
+    }
+    if (response == null) {
+      return AppSession(
+        userId: userId,
+        role: AppRole.worker,
+        displayName: 'Finish registration',
+        profileComplete: false,
+      );
+    }
     final profile = Map<String, dynamic>.from(response as Map);
 
     return AppSession(
       userId: profile['id'] as String,
       role: AppRoleParsing.fromDatabase(profile['role'] as String),
       displayName: profile['full_name'] as String,
+      accountStatus: profile['account_status'] as String? ?? 'INACTIVE',
+      workerNumber: (profile['worker_number'] as num?)?.toInt(),
     );
   }
 }

@@ -1,130 +1,109 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../data/auth_repository.dart';
 import '../application/auth_session.dart';
+import '../data/auth_repository.dart';
 import '../domain/phone_number.dart';
+import 'auth_widgets.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
-
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isSubmitting = false;
-  String? _error;
-
+  final phone = TextEditingController();
+  final password = TextEditingController();
+  bool busy = false;
+  String? error;
   @override
   void dispose() {
-    _phoneController.dispose();
-    _passwordController.dispose();
+    phone.dispose();
+    password.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  Future<void> submit() async {
+    if (busy) return;
+    final controller = ref.read(authSessionControllerProvider);
     setState(() {
-      _isSubmitting = true;
-      _error = null;
+      busy = true;
+      error = null;
     });
-
+    controller.setAuthFlowInProgress(true);
     try {
+      if (password.text.isEmpty) {
+        throw const FormatException('Enter your password.');
+      }
       final session = await ref
           .read(authRepositoryProvider)
           .signInWithPhonePassword(
-            phone: PhoneNumber.parse(_phoneController.text),
-            password: _passwordController.text,
+            phone: PhoneNumber.parse(phone.text),
+            password: password.text,
           );
-      ref.read(authSessionControllerProvider).setSession(session);
-
-      if (!mounted) {
-        return;
-      }
-
-      context.go(session.role.homePath);
-    } on Object {
+      controller.setAuthFlowInProgress(false);
+      controller.setSession(session);
       if (mounted) {
-        setState(() {
-          _error = 'Unable to sign in with those credentials.';
-        });
+        context.go(
+          session.isRestricted
+              ? '/session'
+              : session.profileComplete
+              ? session.role.homePath
+              : '/register',
+        );
       }
+    } catch (e) {
+      if (mounted) setState(() => error = friendlyAuthError(e));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+      controller.setAuthFlowInProgress(false);
+      if (mounted) setState(() => busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Oslava Events')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Login',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone number',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _isSubmitting ? null : _submit,
-                    child: Text(_isSubmitting ? 'Signing in' : 'Sign in'),
-                  ),
-                  TextButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () => context.go('/register'),
-                    child: const Text('Register as worker'),
-                  ),
-                  TextButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () => context.go('/recovery'),
-                    child: const Text('Reset password'),
-                  ),
-                ],
-              ),
-            ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Oslava Events')),
+    body: AuthFormBody(
+      children: [
+        Text('Login', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 16),
+        TextField(
+          controller: phone,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.telephoneNumberNational],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9 +()-]')),
+          ],
+          decoration: const InputDecoration(
+            labelText: 'WhatsApp number',
+            prefixText: '+91 ',
+            hintText: '98765 43210',
           ),
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 12),
+        PasswordField(controller: password, onSubmitted: (_) => submit()),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: busy ? null : submit,
+          child: Text(busy ? 'Signing in…' : 'Sign in'),
+        ),
+        TextButton(
+          onPressed: busy ? null : () => context.push('/register'),
+          child: const Text('Register as worker'),
+        ),
+      ],
+    ),
+  );
 }

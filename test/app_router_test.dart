@@ -91,7 +91,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(role.label), findsOneWidget);
-      expect(find.text('Workspace shell ready'), findsOneWidget);
+      expect(find.text('Choose a section below or use the navigation bar.'), findsOneWidget);
+      expect(find.text('Sign out'), findsOneWidget);
     });
   }
 }

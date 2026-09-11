@@ -15,6 +15,10 @@ final eventRepositoryProvider = Provider<EventRepository>(
 abstract interface class EventRepository {
   Future<List<EventSummary>> loadAdminEvents();
 
+  Future<AdminEventDashboard> loadAdminDashboard();
+
+  Future<AdminEventDetail> loadAdminEventDetail(String eventId);
+
   Future<List<WorkerEvent>> loadWorkerEvents();
 
   Future<WorkerEvent?> loadWorkerEventDetail(String eventId);
@@ -26,6 +30,10 @@ abstract interface class EventRepository {
     bool lateCancellationAcknowledged = false,
   });
 
+  Future<BookingApplicationResult> getBookingResult(String requestId);
+
+  Future<BookingApplicationResult?> loadPendingBooking(String eventId);
+
   Future<WaitlistResult> joinWaitlist({
     required String eventId,
     required String idempotencyKey,
@@ -34,6 +42,13 @@ abstract interface class EventRepository {
 
   Future<List<WorkerAssignment>> loadWorkerAssignments();
 
+  Future<List<WorkerWaitlistEntry>> loadWorkerWaitlist();
+
+  Future<WaitlistEntryStatus> withdrawWaitlist({
+    required String waitlistEntryId,
+    required String reason,
+  });
+
   Future<CancellationResult> cancelAssignment({
     required String assignmentId,
     required String reason,
@@ -41,6 +56,14 @@ abstract interface class EventRepository {
   });
 
   Future<String> createDraft(EventDraftInput input);
+
+  Future<int> updateEvent({
+    required String eventId,
+    required int expectedVersion,
+    required EventDraftInput input,
+    required String reason,
+    bool confirmConflicts = false,
+  });
 
   Future<void> publishEvent(String eventId);
 
@@ -57,6 +80,32 @@ class SupabaseEventRepository implements EventRepository {
   final SupabaseClient _client;
 
   @override
+  Future<BookingApplicationResult> getBookingResult(String requestId) async {
+    final response = await _client.rpc(
+      'get_booking_result',
+      params: {'p_booking_request_id': requestId},
+    );
+    return BookingApplicationResult.fromJson(
+      Map<String, dynamic>.from((response as List).single as Map),
+    );
+  }
+
+  @override
+  Future<BookingApplicationResult?> loadPendingBooking(String eventId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return null;
+    final row = await _client
+        .from('booking_requests')
+        .select('id')
+        .eq('worker_id', userId)
+        .eq('event_id', eventId)
+        .eq('result', 'PENDING')
+        .maybeSingle();
+    if (row == null) return null;
+    return getBookingResult(row['id'] as String);
+  }
+
+  @override
   Future<List<EventSummary>> loadAdminEvents() async {
     final response = await _client.rpc('admin_event_list');
     return (response as List<dynamic>)
@@ -64,6 +113,25 @@ class SupabaseEventRepository implements EventRepository {
           (row) => EventSummary.fromJson(Map<String, dynamic>.from(row as Map)),
         )
         .toList();
+  }
+
+  @override
+  Future<AdminEventDashboard> loadAdminDashboard() async {
+    final response = await _client.rpc('admin_event_dashboard');
+    return AdminEventDashboard.fromJson(
+      Map<String, dynamic>.from((response as List).single as Map),
+    );
+  }
+
+  @override
+  Future<AdminEventDetail> loadAdminEventDetail(String eventId) async {
+    final response = await _client.rpc(
+      'admin_event_detail',
+      params: {'p_event_id': eventId},
+    );
+    return AdminEventDetail.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
   }
 
   @override
@@ -79,14 +147,11 @@ class SupabaseEventRepository implements EventRepository {
   @override
   Future<WorkerEvent?> loadWorkerEventDetail(String eventId) async {
     final response = await _client.rpc(
-      'worker_event_detail',
+      'worker_event_detail_full',
       params: {'p_event_id': eventId},
     );
-    final rows = response as List<dynamic>;
-    if (rows.isEmpty) {
-      return null;
-    }
-    return WorkerEvent.fromJson(Map<String, dynamic>.from(rows.first as Map));
+    if (response == null) return null;
+    return WorkerEvent.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
   @override
@@ -143,6 +208,30 @@ class SupabaseEventRepository implements EventRepository {
   }
 
   @override
+  Future<List<WorkerWaitlistEntry>> loadWorkerWaitlist() async {
+    final response = await _client.rpc('worker_my_waitlist');
+    return (response as List<dynamic>)
+        .map(
+          (row) => WorkerWaitlistEntry.fromJson(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<WaitlistEntryStatus> withdrawWaitlist({
+    required String waitlistEntryId,
+    required String reason,
+  }) async {
+    final response = await _client.rpc(
+      'withdraw_waitlist',
+      params: {'p_waitlist_entry_id': waitlistEntryId, 'p_reason': reason},
+    );
+    return WaitlistEntryStatus.fromDatabase(response as String);
+  }
+
+  @override
   Future<CancellationResult> cancelAssignment({
     required String assignmentId,
     required String reason,
@@ -189,6 +278,35 @@ class SupabaseEventRepository implements EventRepository {
     }
 
     return eventId;
+  }
+
+  @override
+  Future<int> updateEvent({
+    required String eventId,
+    required int expectedVersion,
+    required EventDraftInput input,
+    required String reason,
+    bool confirmConflicts = false,
+  }) async {
+    if (input.tierStrategy == TierStrategy.custom &&
+        input.customTierOffsets == null) {
+      throw ArgumentError('Custom tier strategy requires release offsets.');
+    }
+    if (input.customTierOffsets case final offsets? when !offsets.isValid) {
+      throw ArgumentError(
+        'Tier release offsets must expand in A, B, C, F order.',
+      );
+    }
+    final response = await _client.rpc(
+      'update_event',
+      params: input.toUpdateRpcParams(
+        eventId: eventId,
+        expectedVersion: expectedVersion,
+        reason: reason,
+        confirmConflicts: confirmConflicts,
+      ),
+    );
+    return (response as num).toInt();
   }
 
   @override

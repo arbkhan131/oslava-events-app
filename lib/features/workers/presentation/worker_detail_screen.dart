@@ -45,10 +45,14 @@ class WorkerDetailScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
+              _ProfileAvatar(path: worker.profilePhotoPath),
+              const SizedBox(height: 8),
               Text('Worker ID ${worker.workerNumber ?? '-'}'),
               Text('Phone ${worker.phoneE164}'),
               Text('Category ${worker.category?.databaseValue ?? 'None'}'),
               Text('Account ${worker.accountStatus.databaseValue}'),
+              const SizedBox(height: 12),
+              _ReliabilitySummary(worker: worker),
               if (viewerRole.canDetainWorkers) ...[
                 const SizedBox(height: 16),
                 Wrap(
@@ -69,7 +73,23 @@ class WorkerDetailScreen extends ConsumerWidget {
                       icon: const Icon(Icons.check_circle),
                       label: const Text('Release'),
                     ),
+                    OutlinedButton.icon(
+                      onPressed: () => _changePhone(context, ref, worker),
+                      icon: const Icon(Icons.phone),
+                      label: const Text('Change phone'),
+                    ),
                   ],
+                ),
+              ],
+              if (viewerRole.canChangeWorkerCategory &&
+                  worker.role == AppRole.worker &&
+                  worker.accountStatus == AccountStatus.active &&
+                  worker.category != null) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => _changeCategory(context, ref, worker),
+                  icon: const Icon(Icons.trending_up),
+                  label: const Text('Change category'),
                 ),
               ],
               const SizedBox(height: 24),
@@ -108,6 +128,39 @@ class WorkerDetailScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _changePhone(
+    BuildContext context,
+    WidgetRef ref,
+    WorkerProfile worker,
+  ) async {
+    final request = await showDialog<_PhoneChangeRequest>(
+      context: context,
+      builder: (context) => const _PhoneChangeDialog(),
+    );
+    if (request == null || request.reason.trim().isEmpty) return;
+    try {
+      await ref
+          .read(workerRepositoryProvider)
+          .changeUserPhone(
+            userId: worker.userId,
+            phoneE164: request.phoneE164,
+            reason: request.reason,
+          );
+      ref.invalidate(workerDetailProvider(worker.userId));
+      ref.invalidate(workerHistoryProvider(worker.userId));
+      ref.invalidate(workerDirectoryProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Phone updated')));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
   Future<void> _changeStatus(
     BuildContext context,
     WidgetRef ref,
@@ -132,6 +185,176 @@ class WorkerDetailScreen extends ConsumerWidget {
     ref.invalidate(workerDetailProvider(worker.userId));
     ref.invalidate(workerHistoryProvider(worker.userId));
     ref.invalidate(workerDirectoryProvider);
+  }
+
+  Future<void> _changeCategory(
+    BuildContext context,
+    WidgetRef ref,
+    WorkerProfile worker,
+  ) async {
+    final currentCategory = worker.category;
+    if (currentCategory == null) {
+      return;
+    }
+
+    final request = await showDialog<_CategoryChangeRequest>(
+      context: context,
+      builder: (context) => _CategoryChangeDialog(
+        currentCategory: currentCategory,
+        options: currentCategory.oneStepOptions,
+      ),
+    );
+    if (request == null || request.reason.trim().isEmpty) {
+      return;
+    }
+
+    try {
+      await ref
+          .read(workerRepositoryProvider)
+          .changeWorkerCategory(
+            userId: worker.userId,
+            newCategory: request.newCategory,
+            reason: request.reason,
+          );
+      ref.invalidate(workerDetailProvider(worker.userId));
+      ref.invalidate(workerHistoryProvider(worker.userId));
+      ref.invalidate(workerDirectoryProvider);
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Category updated')));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+}
+
+class _ProfileAvatar extends ConsumerWidget {
+  const _ProfileAvatar({required this.path});
+
+  final String? path;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<String?>(
+      future: ref.read(workerRepositoryProvider).signedProfilePhotoUrl(path),
+      builder: (context, snapshot) {
+        final url = snapshot.data;
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: CircleAvatar(
+            radius: 36,
+            backgroundImage: url == null ? null : NetworkImage(url),
+            child: url == null ? const Icon(Icons.person) : null,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PhoneChangeRequest {
+  const _PhoneChangeRequest({required this.phoneE164, required this.reason});
+
+  final String phoneE164;
+  final String reason;
+}
+
+class _PhoneChangeDialog extends StatefulWidget {
+  const _PhoneChangeDialog();
+
+  @override
+  State<_PhoneChangeDialog> createState() => _PhoneChangeDialogState();
+}
+
+class _PhoneChangeDialogState extends State<_PhoneChangeDialog> {
+  final _phone = TextEditingController();
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change phone'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(labelText: 'New phone'),
+          ),
+          TextField(
+            controller: _reason,
+            decoration: const InputDecoration(labelText: 'Reason'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(
+            _PhoneChangeRequest(
+              phoneE164: _phone.text.trim(),
+              reason: _reason.text.trim(),
+            ),
+          ),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReliabilitySummary extends StatelessWidget {
+  const _ReliabilitySummary({required this.worker});
+
+  final WorkerProfile worker;
+
+  @override
+  Widget build(BuildContext context) {
+    final score = worker.reliabilityScore;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Reliability', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(score == null ? 'Score unrated' : 'Score ${score.round()}'),
+        Text(worker.reliabilityState.label(worker.reliabilitySampleCount)),
+        Text(
+          '${worker.reliabilityPresentCount} present, '
+          '${worker.reliabilityLateCount} late, '
+          '${worker.reliabilityAbsentCount} absent',
+        ),
+        Text(
+          '${worker.reliabilityWorkerCancellationCount} worker cancellations, '
+          '${worker.reliabilityCompletedEventCount} completed events',
+        ),
+        Text(
+          worker.reliabilityPerformanceAverage == null
+              ? '${worker.reliabilityPerformanceEventCount} reviewed events'
+              : '${worker.reliabilityPerformanceEventCount} reviewed events, '
+                    '${worker.reliabilityPerformanceAverage!.toStringAsFixed(2)} avg',
+        ),
+        if (worker.reliabilityConfigVersion != null)
+          Text('Config v${worker.reliabilityConfigVersion}'),
+      ],
+    );
   }
 }
 
@@ -167,6 +390,92 @@ class _ReasonDialogState extends State<_ReasonDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryChangeRequest {
+  const _CategoryChangeRequest({
+    required this.newCategory,
+    required this.reason,
+  });
+
+  final WorkerCategory newCategory;
+  final String reason;
+}
+
+class _CategoryChangeDialog extends StatefulWidget {
+  const _CategoryChangeDialog({
+    required this.currentCategory,
+    required this.options,
+  });
+
+  final WorkerCategory currentCategory;
+  final List<WorkerCategory> options;
+
+  @override
+  State<_CategoryChangeDialog> createState() => _CategoryChangeDialogState();
+}
+
+class _CategoryChangeDialogState extends State<_CategoryChangeDialog> {
+  late WorkerCategory _selectedCategory = widget.options.first;
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change category'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Current ${widget.currentCategory.label}'),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<WorkerCategory>(
+            initialValue: _selectedCategory,
+            decoration: const InputDecoration(labelText: 'New category'),
+            items: [
+              for (final category in widget.options)
+                DropdownMenuItem(value: category, child: Text(category.label)),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _selectedCategory = value);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reason,
+            decoration: const InputDecoration(labelText: 'Reason'),
+            autofocus: true,
+            maxLines: 2,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(
+            _CategoryChangeRequest(
+              newCategory: _selectedCategory,
+              reason: _reason.text.trim(),
+            ),
+          ),
           child: const Text('Save'),
         ),
       ],

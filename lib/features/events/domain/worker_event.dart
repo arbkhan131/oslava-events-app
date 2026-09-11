@@ -60,6 +60,11 @@ class WorkerEvent {
     this.ownTierOpensAt,
     this.instructions,
     this.dressCode,
+    this.ownWaitlistEntryId,
+    this.ownWaitlistPosition,
+    this.requirements = const [],
+    this.allowances = const [],
+    this.leaders = const [],
   });
 
   final String id;
@@ -86,6 +91,11 @@ class WorkerEvent {
   final String actionLabel;
   final String? instructions;
   final String? dressCode;
+  final String? ownWaitlistEntryId;
+  final int? ownWaitlistPosition;
+  final List<WorkerEventRequirement> requirements;
+  final List<WorkerEventAllowance> allowances;
+  final List<WorkerEventLeader> leaders;
 
   bool get canApply => actionState == WorkerEventActionState.available;
   bool get canJoinWaitlist => actionState == WorkerEventActionState.full;
@@ -124,6 +134,104 @@ class WorkerEvent {
       actionLabel: json['action_label'] as String,
       instructions: json['instructions'] as String?,
       dressCode: json['dress_code'] as String?,
+      ownWaitlistEntryId: json['own_waitlist_entry_id'] as String?,
+      ownWaitlistPosition: (json['own_waitlist_position'] as num?)?.toInt(),
+      requirements: ((json['requirements'] as List?) ?? [])
+          .map(
+            (row) => WorkerEventRequirement.fromJson(
+              Map<String, dynamic>.from(row as Map),
+            ),
+          )
+          .toList(),
+      allowances: ((json['allowances'] as List?) ?? [])
+          .map(
+            (row) => WorkerEventAllowance.fromJson(
+              Map<String, dynamic>.from(row as Map),
+            ),
+          )
+          .toList(),
+      leaders: ((json['leaders'] as List?) ?? [])
+          .map(
+            (row) => WorkerEventLeader.fromJson(
+              Map<String, dynamic>.from(row as Map),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class WorkerEventRequirement {
+  const WorkerEventRequirement({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.isMandatory,
+    required this.acknowledgementRequired,
+    required this.extraAllowanceAmount,
+    required this.currencyCode,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final bool isMandatory;
+  final bool acknowledgementRequired;
+  final double extraAllowanceAmount;
+  final String currencyCode;
+
+  static WorkerEventRequirement fromJson(Map<String, dynamic> json) {
+    return WorkerEventRequirement(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String?,
+      isMandatory: json['is_mandatory'] as bool? ?? true,
+      acknowledgementRequired:
+          json['acknowledgement_required'] as bool? ?? false,
+      extraAllowanceAmount:
+          (json['extra_allowance_amount'] as num?)?.toDouble() ?? 0,
+      currencyCode: json['currency_code'] as String? ?? 'INR',
+    );
+  }
+}
+
+class WorkerEventAllowance {
+  const WorkerEventAllowance({
+    required this.label,
+    this.description,
+    required this.amount,
+    required this.currencyCode,
+  });
+  final String label;
+  final String? description;
+  final double amount;
+  final String currencyCode;
+
+  static WorkerEventAllowance fromJson(Map<String, dynamic> json) {
+    return WorkerEventAllowance(
+      label: json['label'] as String,
+      description: json['description'] as String?,
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      currencyCode: json['currency_code'] as String? ?? 'INR',
+    );
+  }
+}
+
+class WorkerEventLeader {
+  const WorkerEventLeader({
+    required this.userId,
+    required this.fullName,
+    required this.leaderRole,
+  });
+  final String userId;
+  final String fullName;
+  final String leaderRole;
+
+  static WorkerEventLeader fromJson(Map<String, dynamic> json) {
+    return WorkerEventLeader(
+      userId: json['user_id'] as String,
+      fullName: json['full_name'] as String,
+      leaderRole: json['leader_role'] as String,
     );
   }
 }

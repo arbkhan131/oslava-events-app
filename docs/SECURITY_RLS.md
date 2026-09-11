@@ -65,6 +65,7 @@ Captain/Supervisor detention and exact worker-management row scope remain decisi
 **Delete**
 
 - No client role. Retention/deletion is an administrative governance process.
+- Verified erasure is requested through a controlled RPC that immediately sets `account_status = INACTIVE`; current PII/photo deletion or anonymization is handled by server-side governance workflows without giving clients destructive table access.
 
 ### `worker_profiles`
 
@@ -171,6 +172,15 @@ For `worker_category_history`, `account_actions`, and `role_history`:
 - User inserts/refreshes/deactivates only their own device token through RPC.
 - No user may read another user's token or delivery provider response.
 - Notification and delivery rows are inserted/claimed/updated only by trusted functions/dispatcher.
+- Retention cleanup can remove expired notifications, terminal delivery attempts, and invalidated tokens only through the controlled cleanup RPC.
+
+### Privacy, terms, and retention
+
+- The active Privacy Notice and Terms version is readable by clients.
+- Users may read their own recorded acknowledgement; Admin/Super Admin may read acknowledgements for governance.
+- No client role may directly insert, update, or delete acknowledgement rows.
+- Erasure-request and retention-run ledgers are readable only to the requesting/target user or Admin/Super Admin scope as appropriate.
+- Expired audit logs may be deleted only by the controlled retention cleanup path and only when no active legal hold exists.
 
 ### `audit_logs`
 

@@ -2,6 +2,25 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
+-- Sequential regression fixtures use both phases of the R2 booking contract.
+-- Real contender overlap is verified separately by test_readiness_r2.py.
+create function pg_temp.apply_and_resolve(p_event_id uuid,p_idempotency_key text,
+  p_acknowledged_requirement_ids uuid[] default '{}',p_late_cancellation_acknowledged boolean default false)
+returns table(booking_request_id uuid,result public.booking_result,result_detail_code text,
+  assignment_id uuid,event_id uuid,vacancy_count integer)
+language plpgsql as $$
+declare r record;
+begin
+  select * into r from public.apply_for_event(p_event_id,p_idempotency_key,p_acknowledged_requirement_ids,p_late_cancellation_acknowledged);
+  if r.result='PENDING' then
+    perform pg_sleep(1.05);
+    return query select * from public.get_booking_result(r.booking_request_id);
+  else
+    return query select r.booking_request_id,r.result,r.result_detail_code,r.assignment_id,r.event_id,r.vacancy_count;
+  end if;
+end $$;
+
+
 select plan(24);
 
 select has_table('public', 'booking_requests', 'booking requests table exists');
@@ -112,14 +131,14 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000009002
 
 create temp table phase_9_open_result as
 select *
-from public.apply_for_event((select id from phase_9_events where key = 'open'), 'open-a', '{}', false);
+from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'open'), 'open-a', '{}', false);
 
 select is((select result from phase_9_open_result), 'CONFIRMED'::public.booking_result, 'eligible worker is confirmed');
 select isnt((select assignment_id from phase_9_open_result), null, 'confirmed result returns assignment id');
 
 create temp table phase_9_repeat_result as
 select *
-from public.apply_for_event((select id from phase_9_events where key = 'open'), 'open-a', '{}', false);
+from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'open'), 'open-a', '{}', false);
 
 select is(
   (select assignment_id from phase_9_repeat_result),
@@ -138,7 +157,7 @@ select is(
 );
 
 select is(
-  (select result from public.apply_for_event((select id from phase_9_events where key = 'open'), 'duplicate-a', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'open'), 'duplicate-a', '{}', false)),
   'DUPLICATE'::public.booking_result,
   'second application to the same event is duplicate'
 );
@@ -146,7 +165,7 @@ select is(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000009005', true);
 
 select is(
-  (select result_detail_code from public.apply_for_event((select id from phase_9_events where key = 'open'), 'incomplete-a', '{}', false)),
+  (select result_detail_code from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'open'), 'incomplete-a', '{}', false)),
   'PROFILE_INCOMPLETE',
   'incomplete profile cannot apply'
 );
@@ -154,13 +173,13 @@ select is(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000009003', true);
 
 select is(
-  (select result from public.apply_for_event((select id from phase_9_events where key = 'locked'), 'locked-c', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'locked'), 'locked-c', '{}', false)),
   'LOCKED'::public.booking_result,
   'closed tier returns locked'
 );
 
 select is(
-  (select result from public.apply_for_event((select id from phase_9_events where key = 'requirements'), 'missing-req-c', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'requirements'), 'missing-req-c', '{}', false)),
   'INVALID_REQUIREMENTS'::public.booking_result,
   'missing mandatory acknowledgement is rejected'
 );
@@ -168,7 +187,7 @@ select is(
 select is(
   (
     select result
-    from public.apply_for_event(
+    from pg_temp.apply_and_resolve(
       (select id from phase_9_events where key = 'requirements'),
       'acked-req-c',
       array[(select id from public.event_requirements where event_id = (select id from phase_9_events where key = 'requirements'))],
@@ -193,7 +212,7 @@ select is(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000009002', true);
 
 select is(
-  (select result from public.apply_for_event((select id from phase_9_events where key = 'conflict'), 'conflict-c', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'conflict'), 'conflict-c', '{}', false)),
   'CONFLICT'::public.booking_result,
   'one-hour conflict blocks booking'
 );
@@ -201,7 +220,7 @@ select is(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000009004', true);
 
 select is(
-  (select result from public.apply_for_event((select id from phase_9_events where key = 'full'), 'full-f', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'full'), 'full-f', '{}', false)),
   'CONFIRMED'::public.booking_result,
   'first booking fills one-seat event'
 );
@@ -219,7 +238,7 @@ select is(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000009003', true);
 
 select is(
-  (select result from public.apply_for_event((select id from phase_9_events where key = 'full'), 'waitlist-available-c', '{}', false)),
+  (select result from pg_temp.apply_and_resolve((select id from phase_9_events where key = 'full'), 'waitlist-available-c', '{}', false)),
   'WAITLIST_AVAILABLE'::public.booking_result,
   'full event returns waitlist available without auto-enrolling'
 );

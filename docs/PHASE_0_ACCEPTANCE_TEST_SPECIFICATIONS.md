@@ -108,7 +108,20 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | AT-038 | Captain/Supervisor promotes or demotes any Worker globally by exactly one step, with a mandatory reason. Expect current category, immutable history, actor role, and future eligibility update. | Supabase/database; Flutter integration |
 | AT-039 | Attempt a skipped category transition, category change on a non-Worker, or category change without reason. Expect denial. | Supabase/database |
 | AT-040 | Create a 1-5-star review with optional tags/notes. Expect exactly one review per reviewer/worker/event; edit it before event Close and reject edit after Close. | Supabase/database; Flutter widget |
-| AT-041 | Update attendance, cancellation, and performance source facts. Expect a queued/recomputed reliability result when Phase 13 exists, but no automatic category change. | Supabase/database |
+| AT-041 | Update attendance, cancellation, and performance source facts. Expect server-side reliability recomputation, versioned/idempotent snapshots, raw metrics, and no automatic category change. | Supabase/database |
+| AT-041A | Score a zero-history Worker. Expect `PROVISIONAL`, null score, zero raw metrics, and no category change. | Supabase/database; Flutter widget |
+| AT-041B | Score a Worker with 1-2 eligible resolved commitments. Expect `PROVISIONAL`, null score, raw metrics visible, and "Provisional - X of 3 commitments" style display. | Supabase/database; Flutter widget |
+| AT-041C | Score a Worker at 3 eligible resolved commitments using exact show-up, punctuality, performance, and commitment weighting fixtures. Expect a 0-100 score rounded/stored to two decimals. | Supabase/database |
+| AT-041D | Include PRESENT, LATE, ABSENT, and NOT_MARKED attendance. Expect NOT_MARKED exclusion, LATE counted for show-up but not punctuality, and ABSENT counted against show-up only. | Supabase/database |
+| AT-041E | Include Worker cancellation plus management/event/waitlist/system exclusions. Expect only Worker-initiated confirmed-assignment cancellations to reduce commitment. | Supabase/database |
+| AT-041F | Add multiple reviewers for one Worker/event and a separate reviewed event. Expect reviewer ratings averaged per event before cross-event averaging. | Supabase/database |
+| AT-041G | Omit performance data or another component. Expect remaining available weights to normalize rather than injecting a default value. | Supabase/database |
+| AT-041H | Publish/recompute with a new reliability configuration. Expect snapshots to preserve config version and reproducible raw component metrics. | Supabase/database |
+| AT-041I | Register, refresh, and invalidate FCM device tokens. Expect users to manage only their own token records, no token reads by other clients, and no server credentials in Flutter. | Supabase/database; Flutter widget |
+| AT-041J | Insert a durable notification for a user with an active device token. Expect exactly one delivery outbox row, retry/backoff state, successful completion state, invalid-token retirement, and duplicate suppression. | Supabase/database |
+| AT-041K | Confirm Workers 30 hours, 6 hours, and 45 minutes before reporting. Expect 24h+2h reminders, only 2h reminder, and no reminders respectively; cancelled/removed assignments and cancelled events skip future reminders. | Supabase/database scheduler |
+| AT-041L | Display in-app Alerts with unread/read state and safe deep links. Mark an alert read and expect idempotent server state. | Supabase/database; Flutter widget |
+| AT-041M | Deliver operational notifications without app-level quiet-hour suppression. Expect all V1 notification types eligible for normal delivery; user-configurable quiet hours remain absent in V1. | Supabase/database |
 
 ### Security, audit, presentation, and release boundaries
 
@@ -120,6 +133,11 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | AT-045 | Render server result codes for Locked, Conflict, Restricted, Full/Waitlist Available, Confirmed, and Cancellation Locked. Expect clear UI state with no premature local success claim. | Flutter unit/widget |
 | AT-046 | Verify role route guards and deep links hide unavailable experiences, then verify server access denial still protects direct requests. | Flutter integration; Supabase/database RLS |
 | AT-047 | Verify application configuration and release output contain no service-role key, database password, or server credential. | Flutter integration/release inspection |
+| AT-048 | Require current Privacy Notice + Terms acknowledgement before Worker registration completes. Expect user ID, version, and acceptance timestamp to be recorded; missing/stale acknowledgement is rejected server-side. | Supabase/database; Flutter widget |
+| AT-049 | Run retention cleanup in dry-run and live modes. Expect expired notifications, terminal delivery attempts, and invalidated device tokens to be counted/deleted idempotently; client roles cannot forge cleanup rows. | Supabase/database |
+| AT-050 | Record verified account-erasure request. Expect immediate `INACTIVE` account status, immutable audit entry, 30-day due date, and no destructive hard-delete of operational history. | Supabase/database |
+| AT-051 | Verify backup/restore and incident-response runbooks exist and cover the approved V1 scenarios, RPO/RTO targets, legal/owner acceptance gaps, and secret restoration outside Git. | Documentation review; operational rehearsal |
+| AT-052 | Build a signed Android release candidate from externalized signing and production public config. Expect application ID `com.oslavaevents.oslava_events`, no debug signing, no bundled server credentials, Play internal testing checklist, rollback plan, and production smoke-test plan. | Flutter release inspection; Play Console/manual |
 
 ## Execution mapping
 
@@ -137,9 +155,10 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | Phase 10 | AT-025 to AT-032, including explicit waitlist opt-in, no automatic enrollment, penalty-free waiting withdrawal, promoted-entry cancellation handoff, and refill revalidation. |
 | Phase 11 | AT-035 to AT-037 |
 | Phase 12 | AT-038 to AT-040 |
-| Phase 13 | AT-041 after weighting is approved |
-| Phase 14 | AT-015, AT-016 and delivery/retry tests |
-| Phase 16 | Full acceptance suite, including AT-042 to AT-047 |
+| Phase 13 | AT-041 to AT-041H |
+| Phase 14 | AT-015, AT-016, AT-041I to AT-041M and delivery/retry tests |
+| Phase 16 | Full acceptance suite, including AT-042 to AT-051 |
+| Phase 17 | AT-052 |
 
 ## Explicitly deferred decisions and deadlines
 
@@ -148,9 +167,9 @@ All timestamp fixtures use `Asia/Kolkata` display expectations and a controllabl
 | Password reset/recovery, phone reassignment, minimum Worker age, and profile-photo file limits | Phase 3 | Closed before Phase 3: SMS OTP recovery, non-self-service audited phone reassignment with Admin limited to Worker/Captain/Supervisor targets and Admin phones requiring Super Admin, Worker minimum age 18, private JPEG/PNG/WebP photos capped at 5 MB and client-compressed toward about 1 MB. |
 | Staff-only Captain/Supervisor role revocation destination and Worker-to-field-role effect on existing assignments/waitlist rows | Phase 4 | Closed before Phase 4: staff-only revocation sets account `INACTIVE` without Worker conversion; former Workers may return to Worker with restored category; Worker-to-field retains confirmed assignments for Admin review and withdraws active waitlist entries without penalty when those tables exist. |
 | Capacity-reduction/removal workflow, event-time-conflict resolution, and exact automatic/manual lifecycle transition timing | Phase 5 | Closed before Phase 5: ordinary capacity reduction cannot go below active confirmed assignments; lower capacity requires explicit management removal; conflict-producing time edits require warning/confirmation and flags; lifecycle/recruitment timing rules are finalized with Phase 6/booking integration boundaries recorded. |
-| Reliability weights, minimum sample, cancellation contribution, performance aggregation, and recompute timing | Phase 13 | Intentionally deferred; no scoring formula is selected. |
-| Reporting reminder lead time and notification quiet-time behavior | Phase 14 | Documented as deferred. |
-| Retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident response | Phase 16 | Intentionally deferred; production hardening cannot complete without it. |
+| Reliability weights, minimum sample, cancellation contribution, performance aggregation, and recompute timing | Phase 13 | Closed before Phase 13: V1 weights, minimum sample, exclusions, aggregation, recompute timing, and category independence are finalized. |
+| Reporting reminder lead time and notification quiet-time behavior | Phase 14 | Closed before Phase 14: 24h and 2h server-side reporting reminders; no user-configurable app-level quiet hours in V1. |
+| Retention/deletion, privacy consent, profile-photo lifecycle, audit retention, backup/restore, and incident response | Phase 16 | Closed before Phase 16: fixed V1 retention periods, Privacy Notice + Terms acknowledgement, profile-photo replacement/deletion lifecycle, 3-year audit retention with holds, production backup/restore runbook, and incident-response runbook. |
 
 ## Phase 0 result
 
