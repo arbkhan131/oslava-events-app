@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../booking/domain/booking_application_result.dart';
+import '../../booking/domain/friend_booking.dart';
 import '../../booking/domain/settle_booking.dart';
 import '../../booking/domain/waitlist_result.dart';
 import '../data/event_repository.dart';
@@ -234,6 +235,26 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
                         !_busy &&
                             _pending == null &&
                             _attemptKey == null &&
+                            value.canApply &&
+                            value.vacancyCount >= 2 &&
+                            !missingRequiredAcknowledgement
+                        ? () => _joinWithFriend(value)
+                        : null,
+                    icon: const Icon(Icons.group_add),
+                    label: Text(
+                      missingRequiredAcknowledgement
+                          ? 'Acknowledge requirements'
+                          : value.vacancyCount < 2
+                          ? 'Join with friend needs 2 vacancies'
+                          : 'Join with friend',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed:
+                        !_busy &&
+                            _pending == null &&
+                            _attemptKey == null &&
                             value.canJoinWaitlist &&
                             !missingRequiredAcknowledgement
                         ? () => _joinWaitlist(value.id)
@@ -329,6 +350,45 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
     }
   }
 
+  Future<void> _joinWithFriend(WorkerEvent event) async {
+    if (_busy) return;
+    final repository = ref.read(eventRepositoryProvider);
+    final friend = await showDialog<FriendWorker>(
+      context: context,
+      builder: (context) => _JoinWithFriendDialog(
+        eventId: event.id,
+        search: repository.searchBookableFriendWorkers,
+      ),
+    );
+    if (friend == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final result = await repository.applyForEventWithFriend(
+        eventId: event.id,
+        friendWorkerId: friend.workerId,
+        idempotencyKey:
+            'friend-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+        acknowledgedRequirementIds: _acknowledgedRequirements.toList(),
+        lateCancellationAcknowledged: _lateAcknowledged,
+      );
+      if (!mounted) return;
+      final message = friendBookingResultMessage(result);
+      setState(() => _bookingMessage = message);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      _invalidate(event.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _bookingMessage =
+            'Could not complete the friend booking. Please try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _withdrawWaitlist(String waitlistEntryId) async {
     final reason = await showDialog<String>(
       context: context,
@@ -358,6 +418,152 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
     ref.invalidate(workerAssignmentsProvider);
     ref.invalidate(workerWaitlistProvider);
   }
+}
+
+typedef FriendSearch = Future<List<FriendWorker>> Function({
+  required String phoneQuery,
+  required String eventId,
+});
+
+class _JoinWithFriendDialog extends StatefulWidget {
+  const _JoinWithFriendDialog({required this.eventId, required this.search});
+
+  final String eventId;
+  final FriendSearch search;
+
+  @override
+  State<_JoinWithFriendDialog> createState() => _JoinWithFriendDialogState();
+}
+
+class _JoinWithFriendDialogState extends State<_JoinWithFriendDialog> {
+  final _phone = TextEditingController();
+  bool _searching = false;
+  String? _error;
+  List<FriendWorker> _results = const [];
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final query = _phone.text.trim();
+    final digits = query.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 4) {
+      setState(() {
+        _error = 'Enter at least 4 phone digits.';
+        _results = const [];
+      });
+      return;
+    }
+
+    setState(() {
+      _searching = true;
+      _error = null;
+    });
+    try {
+      final results = await widget.search(
+        phoneQuery: query,
+        eventId: widget.eventId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _error = results.isEmpty ? 'No approved worker found.' : null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _results = const [];
+        _error = 'Could not search workers. Check the number and try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Join with friend'),
+    content: SizedBox(
+      width: double.maxFinite,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'Friend WhatsApp number',
+              prefixText: '+91 ',
+              suffixIcon: IconButton(
+                tooltip: 'Search',
+                onPressed: _searching ? null : _search,
+                icon: _searching
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.search),
+              ),
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _search(),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: _results.isEmpty
+                ? const Text('Search by phone number, then choose your friend.')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _results.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final worker = _results[index];
+                      return ListTile(
+                        enabled: worker.canBookForEvent,
+                        title: Text(worker.fullName),
+                        subtitle: Text(
+                          [
+                            worker.phoneE164,
+                            'Category ${worker.category}',
+                            if (worker.workerNumber != null)
+                              'Worker #${worker.workerNumber}',
+                            if (!worker.canBookForEvent)
+                              'Category not open yet',
+                          ].join(' • '),
+                        ),
+                        trailing: worker.canBookForEvent
+                            ? const Icon(Icons.chevron_right)
+                            : const Icon(Icons.lock_outline),
+                        onTap: worker.canBookForEvent
+                            ? () => Navigator.of(context).pop(worker)
+                            : null,
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+    ],
+  );
 }
 
 class _InfoRowData {

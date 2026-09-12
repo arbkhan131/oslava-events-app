@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/bootstrap.dart';
 import '../../booking/domain/booking_application_result.dart';
+import '../../booking/domain/friend_booking.dart';
 import '../../booking/domain/waitlist_result.dart';
 import '../../booking/domain/worker_assignment.dart';
 import '../domain/event_summary.dart';
@@ -31,6 +32,19 @@ abstract interface class EventRepository {
   });
 
   Future<BookingApplicationResult> getBookingResult(String requestId);
+
+  Future<List<FriendWorker>> searchBookableFriendWorkers({
+    required String phoneQuery,
+    required String eventId,
+  });
+
+  Future<FriendBookingResult> applyForEventWithFriend({
+    required String eventId,
+    required String friendWorkerId,
+    required String idempotencyKey,
+    List<String> acknowledgedRequirementIds = const [],
+    bool lateCancellationAcknowledged = false,
+  });
 
   Future<BookingApplicationResult?> loadPendingBooking(String eventId);
 
@@ -87,6 +101,50 @@ class SupabaseEventRepository implements EventRepository {
     );
     return BookingApplicationResult.fromJson(
       Map<String, dynamic>.from((response as List).single as Map),
+    );
+  }
+
+  @override
+  Future<List<FriendWorker>> searchBookableFriendWorkers({
+    required String phoneQuery,
+    required String eventId,
+  }) async {
+    final response = await _client.rpc(
+      'search_bookable_friend_workers',
+      params: {
+        'p_phone_query': phoneQuery,
+        'p_event_id': eventId,
+        'p_limit': 10,
+      },
+    );
+    return (response as List<dynamic>)
+        .map(
+          (row) => FriendWorker.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+  }
+
+  @override
+  Future<FriendBookingResult> applyForEventWithFriend({
+    required String eventId,
+    required String friendWorkerId,
+    required String idempotencyKey,
+    List<String> acknowledgedRequirementIds = const [],
+    bool lateCancellationAcknowledged = false,
+  }) async {
+    final response = await _client.rpc(
+      'apply_for_event_with_friend',
+      params: {
+        'p_event_id': eventId,
+        'p_friend_worker_id': friendWorkerId,
+        'p_idempotency_key': idempotencyKey,
+        'p_acknowledged_requirement_ids': acknowledgedRequirementIds,
+        'p_late_cancellation_acknowledged': lateCancellationAcknowledged,
+      },
+    );
+    final rows = response as List<dynamic>;
+    return FriendBookingResult.fromJson(
+      Map<String, dynamic>.from(rows.first as Map),
     );
   }
 
