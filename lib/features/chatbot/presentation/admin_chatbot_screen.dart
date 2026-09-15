@@ -340,9 +340,9 @@ class _BubbleCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(
-                  bubble.content,
-                  style: TextStyle(color: foreground, height: 1.35),
+                _AssistantMessageContent(
+                  content: bubble.content,
+                  foreground: foreground,
                 ),
                 if (payload?.selection != null) ...[
                   const SizedBox(height: 12),
@@ -473,6 +473,205 @@ class _ActionConfirmationCard extends StatelessWidget {
               : '${word[0].toUpperCase()}${word.substring(1)}',
         )
         .join(' ');
+  }
+}
+
+class _AssistantMessageContent extends StatelessWidget {
+  const _AssistantMessageContent({
+    required this.content,
+    required this.foreground,
+  });
+
+  final String content;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = _MessageBlocks.parse(content);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final block in blocks.blocks)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: block == blocks.blocks.last ? 0 : 10,
+            ),
+            child: switch (block) {
+              _TextMessageBlock(:final text) => SelectableText(
+                _cleanMarkdownText(text),
+                style: TextStyle(color: foreground, height: 1.35),
+              ),
+              _TableMessageBlock(:final headers, :final rows) => _MarkdownTable(
+                headers: headers,
+                rows: rows,
+              ),
+            },
+          ),
+      ],
+    );
+  }
+
+  String _cleanMarkdownText(String text) {
+    return text
+        .replaceAllMapped(
+          RegExp(r'\*\*([^*]+)\*\*'),
+          (match) => match.group(1)!,
+        )
+        .replaceAllMapped(RegExp(r'\*([^*]+)\*'), (match) => match.group(1)!)
+        .replaceAll(RegExp(r'^\s*[-*]\s+', multiLine: true), '• ')
+        .trim();
+  }
+}
+
+sealed class _MessageBlock {
+  const _MessageBlock();
+}
+
+class _TextMessageBlock extends _MessageBlock {
+  const _TextMessageBlock(this.text);
+
+  final String text;
+}
+
+class _TableMessageBlock extends _MessageBlock {
+  const _TableMessageBlock({required this.headers, required this.rows});
+
+  final List<String> headers;
+  final List<List<String>> rows;
+}
+
+class _MessageBlocks {
+  const _MessageBlocks(this.blocks);
+
+  final List<_MessageBlock> blocks;
+
+  static _MessageBlocks parse(String content) {
+    final lines = content.split('\n');
+    final blocks = <_MessageBlock>[];
+    final textBuffer = StringBuffer();
+    var index = 0;
+
+    void flushText() {
+      final text = textBuffer.toString().trim();
+      if (text.isNotEmpty) blocks.add(_TextMessageBlock(text));
+      textBuffer.clear();
+    }
+
+    while (index < lines.length) {
+      final line = lines[index];
+      if (_isTableLine(line)) {
+        final tableLines = <String>[];
+        while (index < lines.length && _isTableLine(lines[index])) {
+          tableLines.add(lines[index]);
+          index++;
+        }
+        final table = _parseTable(tableLines);
+        if (table != null) {
+          flushText();
+          blocks.add(table);
+        } else {
+          textBuffer.writeln(tableLines.join('\n'));
+        }
+        continue;
+      }
+      textBuffer.writeln(line);
+      index++;
+    }
+    flushText();
+    return _MessageBlocks(
+      blocks.isEmpty ? [const _TextMessageBlock('')] : blocks,
+    );
+  }
+
+  static bool _isTableLine(String line) {
+    final trimmed = line.trim();
+    return trimmed.startsWith('|') && trimmed.endsWith('|');
+  }
+
+  static _TableMessageBlock? _parseTable(List<String> lines) {
+    final rows = lines
+        .map(_splitTableRow)
+        .where((row) => row.length > 1)
+        .toList();
+    final dataRows = rows
+        .where((row) => !row.every((cell) => RegExp(r'^-+$').hasMatch(cell)))
+        .toList();
+    if (dataRows.length < 2) return null;
+    return _TableMessageBlock(
+      headers: dataRows.first,
+      rows: dataRows.skip(1).toList(),
+    );
+  }
+
+  static List<String> _splitTableRow(String line) {
+    final trimmed = line.trim();
+    final withoutEdges = trimmed.substring(1, trimmed.length - 1);
+    return withoutEdges
+        .split('|')
+        .map((cell) => cell.replaceAll('*', '').trim())
+        .toList();
+  }
+}
+
+class _MarkdownTable extends StatelessWidget {
+  const _MarkdownTable({required this.headers, required this.rows});
+
+  final List<String> headers;
+  final List<List<String>> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Table(
+        border: TableBorder.symmetric(
+          inside: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        columnWidths: const {0: FlexColumnWidth(1.5), 1: FlexColumnWidth()},
+        children: [
+          TableRow(
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+            ),
+            children: headers
+                .map((cell) => _TableCell(cell, isHeader: true))
+                .toList(),
+          ),
+          for (final row in rows)
+            TableRow(
+              children: [
+                for (var i = 0; i < headers.length; i++)
+                  _TableCell(i < row.length ? row[i] : ''),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableCell extends StatelessWidget {
+  const _TableCell(this.text, {this.isHeader = false});
+
+  final String text;
+  final bool isHeader;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontWeight: isHeader ? FontWeight.w700 : FontWeight.w400,
+        ),
+      ),
+    );
   }
 }
 

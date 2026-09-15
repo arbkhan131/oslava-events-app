@@ -110,5 +110,15 @@ void main() {
       expect(pending.pendingAction!.type, 'publish_event');
       expect(pending.pendingAction!.summary['title'], 'VM hall function');
     });
+
+    test('keeps backend request id in internal error message', () {
+      final error = ChatbotApiException.fromResponse(
+        statusCode: 500,
+        body: '{"error":{"code":"INTERNAL_ERROR","message":"An unexpected error occurred.","retryable":false,"request_id":"req_123"}}',
+      );
+
+      expect(readableChatbotError(error), contains('server error'));
+      expect(readableChatbotError(error), contains('req_123'));
+    });
   });
 }

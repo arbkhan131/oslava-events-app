@@ -102,12 +102,12 @@ class HttpChatbotRepository implements ChatbotRepository {
   }) async {
     final headers = await _headers();
     final uri = _uri(path, query);
-    final encodedBody = body == null ? null : jsonEncode(body);
+    final encodedBody = method == 'POST' ? jsonEncode(body ?? const {}) : null;
     final response = await switch (method) {
       'GET' => _httpClient.get(uri, headers: headers),
       'POST' => _httpClient.post(uri, headers: headers, body: encodedBody),
       _ => throw ArgumentError.value(method, 'method'),
-    }.timeout(const Duration(seconds: 35));
+    }.timeout(const Duration(seconds: 65));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ChatbotApiException.fromResponse(

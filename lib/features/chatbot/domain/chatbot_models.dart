@@ -1,4 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 class ChatbotApiException implements Exception {
   const ChatbotApiException({
@@ -370,9 +374,25 @@ String readableChatbotError(Object error) {
         return 'The data changed before confirmation. Ask the assistant to prepare it again.';
       case 'ACTION_ALREADY_RESOLVED':
         return 'That action was already handled.';
+      case 'INTERNAL_ERROR':
+        return _withRequestId(
+          'The AI assistant had a server error. Please share this request ID with the chatbot backend developer.',
+          error.requestId,
+        );
       default:
-        return error.message;
+        return _withRequestId(error.message, error.requestId);
     }
   }
+  if (error is TimeoutException) {
+    return 'The AI assistant took too long to respond. Please retry.';
+  }
+  if (error is SocketException || error is http.ClientException) {
+    return 'Could not reach the AI assistant. Check your internet connection and retry.';
+  }
   return 'Could not reach the AI assistant. Check your connection and retry.';
+}
+
+String _withRequestId(String message, String? requestId) {
+  if (requestId == null || requestId.trim().isEmpty) return message;
+  return '$message\nRequest ID: $requestId';
 }
