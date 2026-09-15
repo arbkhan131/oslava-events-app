@@ -51,6 +51,18 @@ enum AppRole {
     }
   }
 
+  bool get canUseAdminAi {
+    switch (this) {
+      case AppRole.superAdmin:
+      case AppRole.admin:
+        return true;
+      case AppRole.captain:
+      case AppRole.supervisor:
+      case AppRole.worker:
+        return false;
+    }
+  }
+
   bool get canDetainWorkers {
     switch (this) {
       case AppRole.superAdmin:

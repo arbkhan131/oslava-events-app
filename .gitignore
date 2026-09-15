@@ -52,3 +52,6 @@ app.*.map.json
 *.jks
 *.keystore
 
+
+# External handoff docs cloned for local reference
+.chatbot_handoff_source/

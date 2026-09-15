@@ -29,6 +29,7 @@ class _RoleNavigationShellState extends ConsumerState<RoleNavigationShell> {
         '/worker/work'
       else
         '${role.homePath}/workers',
+      if (role.canUseAdminAi) '${role.homePath}/ai',
       if (role == AppRole.worker) '/worker/profile',
       '${role.homePath}/alerts',
     ];
@@ -80,6 +81,12 @@ class _RoleNavigationShellState extends ConsumerState<RoleNavigationShell> {
                     icon: Icon(Icons.person_outline),
                     selectedIcon: Icon(Icons.person_rounded),
                     label: 'Profile',
+                  ),
+                if (role.canUseAdminAi)
+                  const NavigationDestination(
+                    icon: Icon(Icons.smart_toy_outlined),
+                    selectedIcon: Icon(Icons.smart_toy_rounded),
+                    label: 'AI',
                   ),
                 NavigationDestination(
                   icon: Badge.count(

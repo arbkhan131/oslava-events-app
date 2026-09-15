@@ -106,6 +106,14 @@ class RoleHomeScreen extends ConsumerWidget {
                     subtitle: 'Find workers and review their profiles',
                     onTap: () => context.go('${role.homePath}/workers'),
                   ),
+                if (role.canUseAdminAi)
+                  _HomeShortcut(
+                    icon: Icons.smart_toy_outlined,
+                    title: 'Admin AI',
+                    subtitle:
+                        'Ask questions and prepare admin actions for review',
+                    onTap: () => context.go('${role.homePath}/ai'),
+                  ),
                 _HomeShortcut(
                   icon: Icons.notifications_outlined,
                   title: 'Alerts',

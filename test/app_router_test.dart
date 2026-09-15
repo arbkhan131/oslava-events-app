@@ -59,6 +59,44 @@ void main() {
         '/admin',
       );
     });
+
+    test('allows Admin and Super Admin to open the AI assistant', () {
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: true,
+          role: AppRole.admin,
+          location: '/admin/ai',
+        ),
+        isNull,
+      );
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: true,
+          role: AppRole.superAdmin,
+          location: '/super-admin/ai',
+        ),
+        isNull,
+      );
+    });
+
+    test('prevents non-admin roles from opening the AI assistant', () {
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: true,
+          role: AppRole.worker,
+          location: '/admin/ai',
+        ),
+        '/worker',
+      );
+      expect(
+        roleAwareRedirect(
+          isAuthenticated: true,
+          role: AppRole.captain,
+          location: '/super-admin/ai',
+        ),
+        '/captain',
+      );
+    });
   });
 
   for (final role in AppRole.values) {

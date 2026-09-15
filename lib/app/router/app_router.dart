@@ -12,6 +12,7 @@ import '../../features/auth/presentation/password_recovery_screen.dart';
 import '../../features/auth/presentation/worker_registration_screen.dart';
 import '../../features/attendance/presentation/attendance_roster_screen.dart';
 import '../../features/attendance/presentation/field_event_list_screen.dart';
+import '../../features/chatbot/presentation/admin_chatbot_screen.dart';
 import '../../features/events/presentation/admin_event_detail_screen.dart';
 import '../../features/events/presentation/admin_event_form_screen.dart';
 import '../../features/events/presentation/admin_event_list_screen.dart';
@@ -217,6 +218,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             EventReportScreen(eventId: state.pathParameters['id']!),
       ),
       GoRoute(
+        path: '/admin/ai',
+        builder: (context, state) =>
+            const AdminChatbotScreen(role: AppRole.admin),
+      ),
+      GoRoute(
         path: '/super-admin/workers',
         builder: (context, state) =>
             const WorkerDirectoryScreen(role: AppRole.superAdmin),
@@ -263,6 +269,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/super-admin/events/:id/report',
         builder: (context, state) =>
             EventReportScreen(eventId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/super-admin/ai',
+        builder: (context, state) =>
+            const AdminChatbotScreen(role: AppRole.superAdmin),
       ),
     ]),
   );

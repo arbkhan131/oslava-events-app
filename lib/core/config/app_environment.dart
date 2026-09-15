@@ -28,6 +28,7 @@ class AppEnvironment {
     required this.name,
     required this.supabaseUrl,
     required this.supabaseAnonKey,
+    required this.chatbotBaseUrl,
   });
 
   factory AppEnvironment.fromDartDefines() {
@@ -38,6 +39,7 @@ class AppEnvironment {
       ),
       supabaseUrl: const String.fromEnvironment('SUPABASE_URL'),
       supabaseAnonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
+      chatbotBaseUrl: const String.fromEnvironment('CHATBOT_BASE_URL'),
     );
   }
 
@@ -45,6 +47,7 @@ class AppEnvironment {
     required String environment,
     required String supabaseUrl,
     required String supabaseAnonKey,
+    String chatbotBaseUrl = '',
   }) {
     final name = AppEnvironmentName.parse(environment);
     final defaultLocalUrl = 'http://127.0.0.1:55321';
@@ -56,11 +59,15 @@ class AppEnvironment {
         supabaseAnonKey.trim().isEmpty && name == AppEnvironmentName.local
         ? 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH'
         : supabaseAnonKey.trim();
+    final resolvedChatbotBaseUrl = chatbotBaseUrl.trim().isEmpty
+        ? 'https://oslava-chatbot.vercel.app'
+        : chatbotBaseUrl.trim();
 
     final config = AppEnvironment(
       name: name,
       supabaseUrl: resolvedUrl,
       supabaseAnonKey: resolvedAnonKey,
+      chatbotBaseUrl: resolvedChatbotBaseUrl,
     );
 
     config.validate();
@@ -70,6 +77,7 @@ class AppEnvironment {
   final AppEnvironmentName name;
   final String supabaseUrl;
   final String supabaseAnonKey;
+  final String chatbotBaseUrl;
 
   bool get isLocal => name == AppEnvironmentName.local;
 
@@ -85,6 +93,15 @@ class AppEnvironment {
 
     if (supabaseAnonKey.isEmpty) {
       throw const AppEnvironmentException('SUPABASE_ANON_KEY is required.');
+    }
+
+    final chatbotUri = Uri.tryParse(chatbotBaseUrl);
+    if (chatbotUri == null ||
+        !chatbotUri.hasScheme ||
+        chatbotUri.host.isEmpty) {
+      throw AppEnvironmentException(
+        'Invalid CHATBOT_BASE_URL "$chatbotBaseUrl".',
+      );
     }
 
     final lowerKey = supabaseAnonKey.toLowerCase();
