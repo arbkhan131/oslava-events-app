@@ -7,6 +7,7 @@ import '../../auth/application/auth_session.dart';
 import '../data/fcm_device_token_service.dart';
 import '../data/notification_repository.dart';
 import '../domain/app_notification.dart';
+import '../../../core/widgets/app_feedback.dart';
 
 final alertsProvider = FutureProvider.autoDispose<List<AppNotification>>(
   (ref) => ref.watch(notificationRepositoryProvider).loadNotifications(),
@@ -38,26 +39,59 @@ class AlertsScreen extends ConsumerWidget {
         child: alerts.when(
           data: (items) {
             if (items.isEmpty) {
-              return const Center(child: Text('No alerts yet'));
+              return RefreshIndicator(
+                onRefresh: () => ref.refresh(alertsProvider.future),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    AppEmptyState(
+                      icon: Icons.notifications_none_rounded,
+                      title: 'You’re all caught up',
+                      message: 'Event updates and team announcements will appear here.',
+                      action: OutlinedButton.icon(
+                        onPressed: () => _enablePush(context, ref),
+                        icon: const Icon(Icons.notifications_active_outlined),
+                        label: const Text('Enable notifications'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
             }
 
             final unreadCount = items.where((item) => !item.isRead).length;
             return RefreshIndicator(
-              onRefresh: () async => ref.invalidate(alertsProvider),
+              onRefresh: () async {
+                ref.invalidate(alertsProvider);
+                await ref.read(alertsProvider.future);
+              },
               child: ListView.separated(
                 padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _NotificationPolicyCard(unreadCount: unreadCount);
                   }
                   return _AlertTile(alert: items[index - 1]);
                 },
-                separatorBuilder: (context, index) => const Divider(height: 1),
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
                 itemCount: items.length + 1,
               ),
             );
           },
-          error: (error, stackTrace) => Center(child: Text(error.toString())),
+          error: (error, stackTrace) => ListView(
+            children: [
+              AppEmptyState(
+                icon: Icons.wifi_off_rounded,
+                title: 'Couldn’t load alerts',
+                message: 'Check your connection and try again.',
+                action: FilledButton(
+                  onPressed: () => ref.invalidate(alertsProvider),
+                  child: const Text('Retry'),
+                ),
+              ),
+            ],
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
@@ -73,7 +107,7 @@ class AlertsScreen extends ConsumerWidget {
         return;
       }
       final message = token == null
-          ? 'No FCM token was returned for this device'
+          ? 'Notifications aren’t ready yet. Check notification permission in your phone settings and try again.'
           : 'Push notifications enabled';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
@@ -81,9 +115,13 @@ class AlertsScreen extends ConsumerWidget {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Push setup unavailable: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Couldn’t enable notifications. Check your connection and phone notification settings.',
+          ),
+        ),
+      );
     }
   }
 }
@@ -95,27 +133,53 @@ class _AlertTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(alert.isRead ? Icons.notifications_none : Icons.circle),
-      title: Text(alert.title),
-      subtitle: Text('${alert.body}\n${alert.createdLabel}'),
-      isThreeLine: true,
-      onTap: () async {
-        await ref.read(notificationRepositoryProvider).markRead(alert.id);
-        ref.invalidate(alertsProvider);
-        ref.invalidate(unreadAlertsProvider);
-        invalidateUserData(ref);
-        final session = ref.read(authSessionProvider);
-        final roleHomePath = session?.role.homePath ?? '/worker';
-        final path = notificationTargetPath(
-          notification: alert,
-          roleHomePath: roleHomePath,
-        );
-        if (context.mounted) {
-          context.go(path);
-        }
-      },
+    return Card(
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        leading: CircleAvatar(
+          backgroundColor: alert.isRead
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
+              : Theme.of(context).colorScheme.primaryContainer,
+          child: Icon(
+            alert.isRead
+                ? Icons.notifications_none
+                : Icons.notifications_active_outlined,
+          ),
+        ),
+        title: Text(
+          alert.title,
+          style: TextStyle(
+            fontWeight: alert.isRead ? FontWeight.w500 : FontWeight.w700,
+          ),
+        ),
+        subtitle: Text('${alert.body}\n${alert.createdLabel}'),
+        isThreeLine: true,
+        onTap: () async {
+          try {
+            await ref.read(notificationRepositoryProvider).markRead(alert.id);
+            ref.invalidate(alertsProvider);
+            ref.invalidate(unreadAlertsProvider);
+            invalidateUserData(ref);
+            final session = ref.read(authSessionProvider);
+            final roleHomePath = session?.role.homePath ?? '/worker';
+            final path = notificationTargetPath(
+              notification: alert,
+              roleHomePath: roleHomePath,
+            );
+            if (context.mounted) {
+              context.go(path);
+            }
+          } catch (_) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Couldn’t open this alert. Please try again.'),
+                ),
+              );
+            }
+          }
+        },
+      ),
     );
   }
 }
@@ -142,7 +206,7 @@ class _NotificationPolicyCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Quiet hours are handled by the server. During quiet hours, app alerts remain visible here while push delivery waits for the next allowed window.',
+              'During quiet hours, updates still appear here. Phone notifications arrive when quiet hours end.',
             ),
           ],
         ),

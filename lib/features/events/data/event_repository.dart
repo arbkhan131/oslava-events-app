@@ -112,7 +112,7 @@ class SupabaseEventRepository implements EventRepository {
     final response = await _client.rpc(
       'search_bookable_friend_workers',
       params: {
-        'p_phone_query': phoneQuery,
+        'p_phone_query': _normalizePhoneSearchQuery(phoneQuery),
         'p_event_id': eventId,
         'p_limit': 10,
       },
@@ -122,6 +122,13 @@ class SupabaseEventRepository implements EventRepository {
           (row) => FriendWorker.fromJson(Map<String, dynamic>.from(row as Map)),
         )
         .toList();
+  }
+
+  String _normalizePhoneSearchQuery(String input) {
+    final digits = input.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 10) return '+91$digits';
+    if (digits.length == 12 && digits.startsWith('91')) return '+$digits';
+    return input.trim();
   }
 
   @override

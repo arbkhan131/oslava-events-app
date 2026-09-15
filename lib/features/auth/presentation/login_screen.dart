@@ -7,6 +7,7 @@ import '../application/auth_session.dart';
 import '../data/auth_repository.dart';
 import '../domain/phone_number.dart';
 import 'auth_widgets.dart';
+import '../../../core/widgets/app_feedback.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -28,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> submit() async {
     if (busy) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     final controller = ref.read(authSessionControllerProvider);
     setState(() {
       busy = true;
@@ -68,8 +70,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     appBar: AppBar(title: const Text('Oslava Events')),
     body: AuthFormBody(
       children: [
-        Text('Login', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF173F7A), Color(0xFF167568)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.event_available_rounded,
+                color: Colors.white,
+                size: 36,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Welcome back',
+                style: Theme.of(context).textTheme.headlineMedium
+                    ?.copyWith(color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your team. Your next event.',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+        Text('Login', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 6),
+        const Text('Use your WhatsApp number and password to continue.'),
+        const SizedBox(height: 20),
         TextField(
           controller: phone,
           keyboardType: TextInputType.phone,
@@ -89,17 +126,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (error != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            child: AppNotice(message: error!, isError: true),
           ),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: busy ? null : submit,
           child: Text(busy ? 'Signing in…' : 'Sign in'),
         ),
-        TextButton(
+        const SizedBox(height: 24),
+        const Text('New to the team?', textAlign: TextAlign.center),
+        const SizedBox(height: 8),
+        OutlinedButton(
           onPressed: busy ? null : () => context.push('/register'),
           child: const Text('Register as worker'),
         ),

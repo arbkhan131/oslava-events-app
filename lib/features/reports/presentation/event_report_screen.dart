@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/widgets/app_feedback.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../../events/domain/event_summary.dart';
 import '../data/event_report_pdf.dart';
 import '../data/report_repository.dart';
@@ -87,11 +89,16 @@ class EventReportScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(error.toString(), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () => ref.invalidate(eventReportProvider(query)),
-                    child: const Text('Retry'),
+                  AppEmptyState(
+                    icon: Icons.summarize_outlined,
+                    title: 'Could not load report',
+                    message: friendlyAuthError(error),
+                    action: OutlinedButton.icon(
+                      onPressed: () =>
+                          ref.invalidate(eventReportProvider(query)),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
                   ),
                 ],
               ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/app_feedback.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import 'admin_event_form_screen.dart';
@@ -40,12 +42,16 @@ class AdminEventDetailScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(error.toString(), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () =>
-                        ref.invalidate(adminEventDetailProvider(eventId)),
-                    child: const Text('Retry'),
+                  AppEmptyState(
+                    icon: Icons.event_busy_outlined,
+                    title: 'Could not load event',
+                    message: friendlyAuthError(error),
+                    action: OutlinedButton.icon(
+                      onPressed: () =>
+                          ref.invalidate(adminEventDetailProvider(eventId)),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
                   ),
                 ],
               ),
@@ -248,7 +254,7 @@ class _DetailBody extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }
@@ -280,7 +286,7 @@ class _DetailBody extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }

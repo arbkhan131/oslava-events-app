@@ -524,3 +524,5 @@ $$;
 revoke all on function public.apply_for_event_with_friend(uuid, uuid, text, uuid[], boolean) from public, anon;
 grant execute on function public.apply_for_event_with_friend(uuid, uuid, text, uuid[], boolean) to authenticated;
 
+notify pgrst, 'reload schema';
+

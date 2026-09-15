@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/application/auth_session.dart';
-import '../../auth/application/logout.dart';
 import '../../notifications/presentation/alerts_screen.dart';
 
 class RoleNavigationShell extends ConsumerStatefulWidget {
@@ -20,7 +19,6 @@ class RoleNavigationShell extends ConsumerStatefulWidget {
 }
 
 class _RoleNavigationShellState extends ConsumerState<RoleNavigationShell> {
-  bool signingOut = false;
   @override
   Widget build(BuildContext context) {
     final role = widget.role;
@@ -50,54 +48,37 @@ class _RoleNavigationShellState extends ConsumerState<RoleNavigationShell> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: signingOut
-                    ? null
-                    : () async {
-                        setState(() => signingOut = true);
-                        try {
-                          await logout(ref);
-                        } catch (_) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Could not sign out. Please retry.',
-                                ),
-                              ),
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => signingOut = false);
-                        }
-                      },
-                icon: const Icon(Icons.logout),
-                label: Text(signingOut ? 'Signing out…' : 'Sign out'),
-              ),
-            ),
             NavigationBar(
               selectedIndex: selected < 0 ? 0 : selected,
-              onDestinationSelected: signingOut
-                  ? null
-                  : (index) => context.go(paths[index]),
+              onDestinationSelected: (index) => context.go(paths[index]),
               destinations: [
                 const NavigationDestination(
                   icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
                   label: 'Home',
                 ),
                 const NavigationDestination(
                   icon: Icon(Icons.event_outlined),
+                  selectedIcon: Icon(Icons.event_rounded),
                   label: 'Events',
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.work_outline),
+                  icon: Icon(
+                    role == AppRole.worker
+                        ? Icons.work_outline
+                        : Icons.groups_outlined,
+                  ),
+                  selectedIcon: Icon(
+                    role == AppRole.worker
+                        ? Icons.work_rounded
+                        : Icons.groups_rounded,
+                  ),
                   label: role == AppRole.worker ? 'My Work' : 'Workers',
                 ),
                 if (role == AppRole.worker)
                   const NavigationDestination(
                     icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person_rounded),
                     label: 'Profile',
                   ),
                 NavigationDestination(

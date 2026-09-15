@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -6,6 +9,37 @@ import '../domain/auth_failure.dart';
 String friendlyAuthError(Object error) {
   if (error is FormatException) return error.message;
   if (error is AuthFailure) return error.message;
+  if (error is TimeoutException) {
+    return 'The server is taking too long to respond. Please retry.';
+  }
+  if (error is StorageException) {
+    final message = error.message.trim();
+    if (message.isNotEmpty) {
+      return 'Document upload failed: $message';
+    }
+    return 'Document upload failed. Please choose the files again and retry.';
+  }
+  if (error is PostgrestException) {
+    final message = _readableSupabaseMessage(error.message);
+    if (_isMissingBackendFunction(message)) {
+      return 'This feature is not ready on the server yet. Ask the admin to apply the latest Supabase update and retry.';
+    }
+    if (message.isNotEmpty) return message;
+    return 'Registration could not be saved. Please retry.';
+  }
+  if (error is FunctionException) {
+    final details = error.details;
+    if (details is Map && details['error'] is String) {
+      return details['error'] as String;
+    }
+    if (details is String && details.trim().isNotEmpty) {
+      return details;
+    }
+    if (error.status == 0) {
+      return 'Could not reach registration server. Check your connection and try again.';
+    }
+    return 'Registration server returned an error. Please retry.';
+  }
   if (error is AuthException) {
     switch (error.code) {
       case 'invalid_credentials':
@@ -29,6 +63,27 @@ String friendlyAuthError(Object error) {
     return error.message;
   }
   return 'We could not complete that request. Check your connection and try again.';
+}
+
+bool _isMissingBackendFunction(String message) {
+  final lower = message.toLowerCase();
+  return lower.contains('could not find the function') &&
+      lower.contains('schema cache');
+}
+
+String _readableSupabaseMessage(String rawMessage) {
+  final message = rawMessage.trim();
+  if (message.isEmpty) return '';
+  try {
+    final decoded = jsonDecode(message);
+    if (decoded is Map) {
+      final readable = decoded['message'] ?? decoded['error'] ?? decoded['msg'];
+      if (readable is String && readable.trim().isNotEmpty) {
+        return readable.trim();
+      }
+    }
+  } catch (_) {}
+  return message;
 }
 
 class AuthFormBody extends StatelessWidget {

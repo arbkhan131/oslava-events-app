@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/app_feedback.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../../events/domain/event_summary.dart';
 import '../data/attendance_repository.dart';
 import '../domain/attendance_roster.dart';
@@ -50,7 +52,7 @@ class FieldEventListScreen extends ConsumerWidget {
               dashboard.when(
                 data: (item) => _DashboardCard(dashboard: item),
                 error: (error, _) => _InlineError(
-                  message: error.toString(),
+                  message: friendlyAuthError(error),
                   onRetry: () => ref.invalidate(fieldEventDashboardProvider),
                 ),
                 loading: () => const LinearProgressIndicator(),
@@ -60,8 +62,12 @@ class FieldEventListScreen extends ConsumerWidget {
                 data: (items) {
                   if (items.isEmpty) {
                     return const Padding(
-                      padding: EdgeInsets.only(top: 64),
-                      child: Center(child: Text('No assigned events')),
+                      padding: EdgeInsets.only(top: 48),
+                      child: AppEmptyState(
+                        icon: Icons.event_busy_outlined,
+                        title: 'No assigned events',
+                        message: 'Events assigned to you for field operations will appear here.',
+                      ),
                     );
                   }
 
@@ -86,7 +92,7 @@ class FieldEventListScreen extends ConsumerWidget {
                   );
                 },
                 error: (error, _) => _InlineError(
-                  message: error.toString(),
+                  message: friendlyAuthError(error),
                   onRetry: () => ref.invalidate(fieldEventsProvider),
                 ),
                 loading: () => const Padding(
@@ -116,6 +122,11 @@ class _DashboardCard extends StatelessWidget {
           Text(
             'Today field dashboard',
             style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Counts below are only for events dated today.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
           Wrap(

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -239,7 +240,7 @@ class SupabaseAuthRepository implements AuthRepository {
       privacyTermsVersion: input.privacyTermsVersion,
     );
 
-    await _client.rpc(
+    final registrationResponse = await _client.rpc(
       'complete_phone_worker_registration',
       params: rpcInput.toRpcParams(),
     );
@@ -248,7 +249,39 @@ class SupabaseAuthRepository implements AuthRepository {
         UserAttributes(data: {'registration_draft': null}),
       );
     } catch (_) {}
-    return _loadCurrentProfile();
+    return _sessionFromRegistrationResult(
+      registrationResponse,
+      fallbackUserId: userId,
+      fallbackDisplayName: input.fullName.trim(),
+    );
+  }
+
+  AppSession _sessionFromRegistrationResult(
+    Object? response, {
+    required String fallbackUserId,
+    required String fallbackDisplayName,
+  }) {
+    final row = switch (response) {
+      final List<dynamic> rows when rows.isNotEmpty => rows.first,
+      final Map<String, dynamic> map => map,
+      _ => null,
+    };
+    if (row is! Map) {
+      return AppSession(
+        userId: fallbackUserId,
+        role: AppRole.worker,
+        displayName: fallbackDisplayName,
+        accountStatus: 'PENDING_APPROVAL',
+      );
+    }
+    final data = Map<String, dynamic>.from(row);
+    return AppSession(
+      userId: data['user_id'] as String? ?? fallbackUserId,
+      role: AppRoleParsing.fromDatabase(data['role'] as String? ?? 'WORKER'),
+      displayName: fallbackDisplayName,
+      accountStatus: data['account_status'] as String? ?? 'PENDING_APPROVAL',
+      workerNumber: (data['worker_number'] as num?)?.toInt(),
+    );
   }
 
   Future<void> _ensurePhoneAuthSession(WorkerRegistrationInput input) async {
@@ -256,22 +289,39 @@ class SupabaseAuthRepository implements AuthRepository {
       return;
     }
 
-    final response = await _client.functions.invoke(
-      'create-worker-phone-account',
-      body: {'phone': input.phone.value, 'password': input.password},
-    );
-    if (response.status >= 400) {
-      final data = response.data;
-      if (data is Map && data['error'] is String) {
-        throw AuthFailure(data['error'] as String);
+    try {
+      final response = await _client.functions.invoke(
+        'create-worker-phone-account',
+        body: {'phone': input.phone.value, 'password': input.password},
+      );
+      if (response.status >= 400) {
+        throw AuthFailure(_functionErrorMessage(response.data));
       }
-      throw const AuthFailure('Registration could not be started.');
+    } on FunctionsHttpException catch (error) {
+      if (error.status == 409) {
+        await _client.auth.signInWithPassword(
+          email: input.phone.authEmail,
+          password: input.password,
+        );
+        return;
+      }
+      throw AuthFailure(_functionErrorMessage(error.details));
     }
 
     await _client.auth.signInWithPassword(
       email: input.phone.authEmail,
       password: input.password,
     );
+  }
+
+  String _functionErrorMessage(Object? details) {
+    if (details is Map && details['error'] is String) {
+      return details['error'] as String;
+    }
+    if (details is String && details.trim().isNotEmpty) {
+      return details;
+    }
+    return 'Registration could not be started.';
   }
 
   @override
@@ -341,7 +391,20 @@ class SupabaseAuthRepository implements AuthRepository {
 
   Future<AppSession> _loadCurrentProfile() async {
     final userId = _client.auth.currentUser!.id;
-    final response = await _client.rpc('my_profile').maybeSingle();
+    final Object? response;
+    try {
+      response = await _client.rpc('my_profile').maybeSingle();
+    } on PostgrestException catch (error) {
+      if (_isNoProfileRow(error)) {
+        return AppSession(
+          userId: userId,
+          role: AppRole.worker,
+          displayName: 'Finish registration',
+          profileComplete: false,
+        );
+      }
+      rethrow;
+    }
     if (_client.auth.currentUser?.id != userId) {
       throw const AuthFailure('Your account changed. Please retry.');
     }
@@ -362,5 +425,26 @@ class SupabaseAuthRepository implements AuthRepository {
       accountStatus: profile['account_status'] as String? ?? 'INACTIVE',
       workerNumber: (profile['worker_number'] as num?)?.toInt(),
     );
+  }
+
+  bool _isNoProfileRow(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    final details = error.details?.toString().toLowerCase() ?? '';
+    if (message.contains('"code":"pgrst116"') && message.contains('0 rows')) {
+      return true;
+    }
+    try {
+      final decoded = jsonDecode(error.message);
+      if (decoded is Map) {
+        final code = decoded['code']?.toString();
+        final decodedDetails = decoded['details']?.toString().toLowerCase();
+        if (code == 'PGRST116' &&
+            (decodedDetails?.contains('0 rows') ?? false)) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return error.code == 'PGRST116' &&
+        (message.contains('0 rows') || details.contains('0 rows'));
   }
 }

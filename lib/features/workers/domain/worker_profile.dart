@@ -1,4 +1,5 @@
 import '../../auth/application/auth_session.dart';
+import '../../auth/domain/phone_number.dart';
 
 enum WorkerCategory {
   a,
@@ -511,7 +512,6 @@ class StaffProvisionRequest {
   const StaffProvisionRequest({
     required this.fullName,
     required this.initials,
-    required this.email,
     required this.phoneE164,
     required this.password,
     required this.role,
@@ -520,22 +520,24 @@ class StaffProvisionRequest {
 
   final String fullName;
   final String initials;
-  final String email;
   final String phoneE164;
   final String password;
   final AppRole role;
   final String reason;
 
-  Map<String, dynamic> toFunctionBody() => {
-    'action': 'provision_staff',
-    'email': email.trim().toLowerCase(),
-    'phone': phoneE164,
-    'password': password,
-    'full_name': fullName,
-    'initials': initials,
-    'role': role.databaseValue,
-    'reason': reason,
-  };
+  Map<String, dynamic> toFunctionBody() {
+    final phone = PhoneNumber.parse(phoneE164);
+    return {
+      'action': 'provision_staff',
+      'email': phone.authEmail,
+      'phone': phone.value,
+      'password': password,
+      'full_name': fullName,
+      'initials': initials,
+      'role': role.databaseValue,
+      'reason': reason,
+    };
+  }
 }
 
 class ErasureRequestStatus {

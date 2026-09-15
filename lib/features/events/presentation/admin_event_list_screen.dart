@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../auth/presentation/auth_widgets.dart';
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 
@@ -60,7 +61,7 @@ class AdminEventListScreen extends ConsumerWidget {
               dashboard.when(
                 data: (item) => _DashboardCard(dashboard: item),
                 error: (error, _) => _InlineError(
-                  message: error.toString(),
+                  message: friendlyAuthError(error),
                   onRetry: () => ref.invalidate(adminEventDashboardProvider),
                 ),
                 loading: () => const LinearProgressIndicator(),
@@ -109,29 +110,96 @@ class AdminEventListScreen extends ConsumerWidget {
                     children: [
                       for (final event in filtered)
                         Card(
-                          child: ListTile(
-                            title: Text(event.title),
-                            subtitle: Text(
-                              '${event.venueName}\n${formatKolkataDateTime12h(event.reportingAt)}  ${event.currencyCode} ${event.dailyWage.toStringAsFixed(0)}',
-                            ),
-                            isThreeLine: true,
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(event.eventStatus.databaseValue),
-                                Text(event.recruitmentStatus.databaseValue),
-                              ],
-                            ),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
                             onTap: () =>
                                 context.go('$basePath/events/${event.id}'),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      Chip(
+                                        label: Text(
+                                          event.eventStatus.databaseValue,
+                                        ),
+                                      ),
+                                      Chip(
+                                        label: Text(
+                                          event.recruitmentStatus.databaseValue,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    event.title,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(event.venueName),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    formatKolkataDateTime12h(event.reportingAt),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    '${event.currencyCode} ${event.dailyWage.toStringAsFixed(0)} / day',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      Chip(
+                                        avatar: const Icon(
+                                          Icons.groups_outlined,
+                                          size: 18,
+                                        ),
+                                        label: Text(
+                                          '${event.confirmedCount}/${event.requiredWorkerCount} filled',
+                                        ),
+                                      ),
+                                      Chip(
+                                        avatar: const Icon(
+                                          Icons.event_seat_outlined,
+                                          size: 18,
+                                        ),
+                                        label: Text(
+                                          '${event.vacantCount ?? (event.requiredWorkerCount - event.confirmedCount).clamp(0, event.requiredWorkerCount)} vacant',
+                                        ),
+                                      ),
+                                      if (event.waitlistCount > 0)
+                                        Chip(
+                                          avatar: const Icon(
+                                            Icons.hourglass_empty,
+                                            size: 18,
+                                          ),
+                                          label: Text(
+                                            '${event.waitlistCount} waiting',
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                     ],
                   );
                 },
                 error: (error, _) => _InlineError(
-                  message: error.toString(),
+                  message: friendlyAuthError(error),
                   onRetry: () => ref.invalidate(adminEventsProvider),
                 ),
                 loading: () => const Padding(
@@ -162,6 +230,11 @@ class _DashboardCard extends StatelessWidget {
             Text(
               'Today staffing dashboard',
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Counts below are only for events dated today.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             Wrap(

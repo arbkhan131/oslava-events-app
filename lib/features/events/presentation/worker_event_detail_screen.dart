@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../core/widgets/app_feedback.dart';
 
 import '../../booking/domain/booking_application_result.dart';
 import '../../booking/domain/friend_booking.dart';
 import '../../booking/domain/settle_booking.dart';
 import '../../booking/domain/waitlist_result.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import '../domain/worker_event.dart';
@@ -110,17 +114,66 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
               onRefresh: () =>
                   ref.refresh(workerEventDetailProvider(eventId).future),
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Text(
-                    value.title,
-                    style: Theme.of(context).textTheme.titleLarge,
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF173F7A), Color(0xFF167568)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            Chip(label: Text(value.eventType)),
+                            Chip(label: Text(value.actionLabel)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          value.title,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.place_outlined,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                value.venueName,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(value.eventType),
-                  Text(value.venueName),
                   if (value.mapsUrl != null && value.mapsUrl!.trim().isNotEmpty)
-                    Text(value.mapsUrl!),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openMap(value.mapsUrl!),
+                        icon: const Icon(Icons.directions_outlined),
+                        label: const Text('Open venue map'),
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   _InfoCard(
                     title: 'Schedule',
@@ -198,16 +251,13 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
                       'I understand late booking/cancellation rules',
                     ),
                     subtitle: const Text(
-                      'Required if the server says this event is inside a late-booking window.',
+                      'Late bookings may already be past the cancellation deadline.',
                     ),
                   ),
                   if (_bookingMessage != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _bookingMessage!,
-                        semanticsLabel: _bookingMessage,
-                      ),
+                      child: AppNotice(message: _bookingMessage!),
                     ),
                   FilledButton.icon(
                     onPressed:
@@ -281,12 +331,16 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(error.toString(), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () =>
-                        ref.invalidate(workerEventDetailProvider(eventId)),
-                    child: const Text('Retry'),
+                  AppEmptyState(
+                    icon: Icons.event_busy_outlined,
+                    title: 'Could not load event',
+                    message: friendlyAuthError(error),
+                    action: OutlinedButton.icon(
+                      onPressed: () =>
+                          ref.invalidate(workerEventDetailProvider(eventId)),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
                   ),
                 ],
               ),
@@ -317,10 +371,10 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
         );
       }
       await _settle(result);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
-          _bookingMessage = 'Could not confirm the result. Check application to retry the same request.';
+          _bookingMessage = friendlyAuthError(error);
         });
       }
     } finally {
@@ -378,11 +432,10 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
       _invalidate(event.id);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
-        _bookingMessage =
-            'Could not complete the friend booking. Please try again.';
+        _bookingMessage = friendlyAuthError(error);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -417,6 +470,28 @@ class _WorkerEventDetailState extends ConsumerState<WorkerEventDetailScreen> {
     ref.invalidate(workerEventsProvider);
     ref.invalidate(workerAssignmentsProvider);
     ref.invalidate(workerWaitlistProvider);
+  }
+
+  Future<void> _openMap(String url) async {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null ||
+          !['https', 'http'].contains(uri.scheme) ||
+          uri.host.isEmpty ||
+          !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw const FormatException('Unavailable map');
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Couldn’t open the map. Please check with your event leader.',
+            ),
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -472,11 +547,11 @@ class _JoinWithFriendDialogState extends State<_JoinWithFriendDialog> {
         _results = results;
         _error = results.isEmpty ? 'No approved worker found.' : null;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _results = const [];
-        _error = 'Could not search workers. Check the number and try again.';
+        _error = friendlyAuthError(error);
       });
     } finally {
       if (mounted) setState(() => _searching = false);
@@ -580,7 +655,7 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -588,18 +663,21 @@ class _InfoCard extends StatelessWidget {
           const SizedBox(height: 8),
           for (final row in rows)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 130,
-                    child: Text(
-                      row.label,
-                      style: Theme.of(context).textTheme.labelLarge,
+                  Text(
+                    row.label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  Expanded(child: Text(row.value)),
+                  const SizedBox(height: 4),
+                  Text(
+                    row.value,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                 ],
               ),
             ),

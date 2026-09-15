@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../auth/presentation/auth_widgets.dart';
 import '../../auth/application/auth_session.dart';
 import '../../workers/data/worker_repository.dart';
 import '../../workers/domain/worker_profile.dart';
 import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import 'admin_event_list_screen.dart';
+import '../../../core/widgets/app_section_heading.dart';
 
 final adminEventDetailProvider =
     FutureProvider.family<AdminEventDetail, String>(
@@ -124,7 +126,7 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
                   return _form(event);
                 },
                 error: (error, _) => _ErrorState(
-                  message: error.toString(),
+                  message: friendlyAuthError(error),
                   onRetry: () =>
                       ref.invalidate(adminEventDetailProvider(editingId!)),
                 ),
@@ -139,176 +141,205 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
     return Form(
       key: _formKey,
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(16),
-        children: [
-          if (existing != null && existing.confirmedCount > 0)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.groups),
-                title: Text(
-                  '${existing.confirmedCount} confirmed, ${existing.waitlistCount} waiting',
-                ),
-                subtitle: const Text(
-                  'Capacity or time edits are checked by the backend. If a change affects assignments, it must go through review instead of silently dropping workers.',
-                ),
-              ),
-            ),
-          TextFormField(
-            controller: _title,
-            decoration: const InputDecoration(labelText: 'Title'),
-            validator: _required,
-          ),
-          TextFormField(
-            controller: _eventType,
-            decoration: const InputDecoration(labelText: 'Event type'),
-            validator: _required,
-          ),
-          TextFormField(
-            controller: _venue,
-            decoration: const InputDecoration(labelText: 'Venue'),
-            validator: _required,
-          ),
-          TextFormField(
-            controller: _mapsUrl,
-            decoration: const InputDecoration(labelText: 'Google Maps URL'),
-          ),
-          const SizedBox(height: 12),
-          Text('Schedule — Asia/Kolkata', style: theme.textTheme.titleMedium),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _eventDate,
-                  decoration: const InputDecoration(
-                    labelText: 'Event date YYYY-MM-DD',
+        children:
+            [
+                  const AppSectionHeading(
+                    title: 'Event details',
+                    subtitle:
+                        'Start with the essentials, then set up your team.',
                   ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
-                  ],
-                  validator: _validDate,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _reportingTime,
-                  decoration: const InputDecoration(
-                    labelText: 'Reporting time',
+                  if (existing != null && existing.confirmedCount > 0)
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.groups),
+                        title: Text(
+                          '${existing.confirmedCount} confirmed, ${existing.waitlistCount} waiting',
+                        ),
+                        subtitle: const Text(
+                          'Capacity or time edits are checked by the backend. If a change affects assignments, it must go through review instead of silently dropping workers.',
+                        ),
+                      ),
+                    ),
+                  TextFormField(
+                    controller: _title,
+                    decoration: const InputDecoration(labelText: 'Title'),
+                    validator: _required,
                   ),
-                  validator: _validClock,
-                ),
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _startTime,
-                  decoration: const InputDecoration(labelText: 'Work starts'),
-                  validator: _validClock,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _endTime,
-                  decoration: const InputDecoration(labelText: 'Expected ends'),
-                  validator: _validClock,
-                ),
-              ),
-            ],
-          ),
-          Text(
-            'Overnight work is allowed: if end time is earlier than start time, it is saved on the next day.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _workers,
-                  decoration: const InputDecoration(
-                    labelText: 'Workers needed',
+                  TextFormField(
+                    controller: _eventType,
+                    decoration: const InputDecoration(labelText: 'Event type'),
+                    validator: _required,
                   ),
-                  keyboardType: TextInputType.number,
-                  validator: _positiveInt,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _wage,
-                  decoration: const InputDecoration(
-                    labelText: 'Daily wage INR',
+                  TextFormField(
+                    controller: _venue,
+                    decoration: const InputDecoration(labelText: 'Venue'),
+                    validator: _required,
                   ),
-                  keyboardType: TextInputType.number,
-                  validator: _nonNegativeMoney,
-                ),
-              ),
-            ],
-          ),
-          DropdownButtonFormField<TierStrategy>(
-            initialValue: _tierStrategy,
-            decoration: const InputDecoration(labelText: 'Tier strategy'),
-            items: [
-              for (final strategy in TierStrategy.values)
-                DropdownMenuItem(
-                  value: strategy,
-                  child: Text(strategy.databaseValue),
-                ),
-            ],
-            onChanged: _saving
-                ? null
-                : (value) => setState(() {
-                    _tierStrategy = value ?? TierStrategy.standard;
-                    if (_tierStrategy != TierStrategy.custom) {
-                      _applyPresetOffsets(_tierStrategy);
-                    }
-                  }),
-          ),
-          if (_tierStrategy == TierStrategy.custom)
-            _tierOffsetFields()
-          else
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                describeTierReleaseOffsets(
-                  TierReleaseOffsets.presetFor(_tierStrategy),
-                ),
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          TextFormField(
-            controller: _instructions,
-            decoration: const InputDecoration(labelText: 'Instructions'),
-            maxLines: 3,
-          ),
-          TextFormField(
-            controller: _dressCode,
-            decoration: const InputDecoration(labelText: 'Dress code'),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
-          _leadersSection(),
-          const SizedBox(height: 16),
-          _requirementsSection(),
-          const SizedBox(height: 16),
-          _allowancesSection(),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _saving ? null : () => _save(existing),
-            icon: const Icon(Icons.save),
-            label: Text(
-              _saving
-                  ? 'Saving...'
-                  : existing == null
-                  ? 'Save draft'
-                  : 'Save changes',
-            ),
-          ),
-        ],
+                  TextFormField(
+                    controller: _mapsUrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Google Maps URL',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Schedule — Asia/Kolkata',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _eventDate,
+                          decoration: const InputDecoration(
+                            labelText: 'Event date YYYY-MM-DD',
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9-]'),
+                            ),
+                          ],
+                          validator: _validDate,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _reportingTime,
+                          decoration: const InputDecoration(
+                            labelText: 'Reporting time',
+                          ),
+                          validator: _validClock,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _startTime,
+                          decoration: const InputDecoration(
+                            labelText: 'Work starts',
+                          ),
+                          validator: _validClock,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _endTime,
+                          decoration: const InputDecoration(
+                            labelText: 'Expected ends',
+                          ),
+                          validator: _validClock,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'Overnight work is allowed: if end time is earlier than start time, it is saved on the next day.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _workers,
+                          decoration: const InputDecoration(
+                            labelText: 'Workers needed',
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: _positiveInt,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _wage,
+                          decoration: const InputDecoration(
+                            labelText: 'Daily wage INR',
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: _nonNegativeMoney,
+                        ),
+                      ),
+                    ],
+                  ),
+                  DropdownButtonFormField<TierStrategy>(
+                    initialValue: _tierStrategy,
+                    decoration: const InputDecoration(
+                      labelText: 'Tier strategy',
+                    ),
+                    items: [
+                      for (final strategy in TierStrategy.values)
+                        DropdownMenuItem(
+                          value: strategy,
+                          child: Text(strategy.databaseValue),
+                        ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() {
+                            _tierStrategy = value ?? TierStrategy.standard;
+                            if (_tierStrategy != TierStrategy.custom) {
+                              _applyPresetOffsets(_tierStrategy);
+                            }
+                          }),
+                  ),
+                  if (_tierStrategy == TierStrategy.custom)
+                    _tierOffsetFields()
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        describeTierReleaseOffsets(
+                          TierReleaseOffsets.presetFor(_tierStrategy),
+                        ),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  TextFormField(
+                    controller: _instructions,
+                    decoration: const InputDecoration(
+                      labelText: 'Instructions',
+                    ),
+                    maxLines: 3,
+                  ),
+                  TextFormField(
+                    controller: _dressCode,
+                    decoration: const InputDecoration(labelText: 'Dress code'),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 16),
+                  _leadersSection(),
+                  const SizedBox(height: 16),
+                  _requirementsSection(),
+                  const SizedBox(height: 16),
+                  _allowancesSection(),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: _saving ? null : () => _save(existing),
+                    icon: const Icon(Icons.save),
+                    label: Text(
+                      _saving
+                          ? 'Saving...'
+                          : existing == null
+                          ? 'Save draft'
+                          : 'Save changes',
+                    ),
+                  ),
+                ]
+                .map(
+                  (child) => Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: child,
+                  ),
+                )
+                .toList(),
       ),
     );
   }
@@ -621,7 +652,7 @@ class _AdminEventFormScreenState extends ConsumerState<AdminEventFormScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     } finally {
       if (mounted) {

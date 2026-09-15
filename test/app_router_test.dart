@@ -91,7 +91,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(role.label), findsOneWidget);
-      expect(find.text('Choose a section below or use the navigation bar.'), findsOneWidget);
+      expect(
+        find.text(
+          role == AppRole.worker
+              ? 'Ready for your next event?'
+              : 'Bring your team together.',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Sign out'), findsOneWidget);
     });
   }

@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../features/auth/application/auth_session.dart';
+import '../../../features/auth/domain/phone_number.dart';
+import '../../../features/auth/presentation/auth_widgets.dart';
 import '../data/worker_repository.dart';
 import '../domain/worker_profile.dart';
+import '../../../core/widgets/app_feedback.dart';
 
 final workerSearchTextProvider = StateProvider<String>((ref) => '');
 final workerDirectoryQueryProvider = StateProvider<WorkerDirectoryQuery>(
@@ -51,121 +54,141 @@ class _WorkerDirectoryScreenState extends ConsumerState<WorkerDirectoryScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Workers')),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _search,
-                    decoration: const InputDecoration(
-                      labelText: 'Search workers',
-                      prefixIcon: Icon(Icons.search),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(staffDirectoryProvider);
+            ref.invalidate(workerDirectoryProvider);
+            await ref.read(workerDirectoryProvider.future);
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _search,
+                      decoration: const InputDecoration(
+                        labelText: 'Search workers',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      textInputAction: TextInputAction.search,
+                      onChanged: _searchChanged,
                     ),
-                    textInputAction: TextInputAction.search,
-                    onChanged: _searchChanged,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      DropdownMenu<AccountStatus?>(
-                        initialSelection: query.accountStatus,
-                        label: const Text('Account'),
-                        dropdownMenuEntries: [
-                          const DropdownMenuEntry(
-                            value: null,
-                            label: 'All accounts',
-                          ),
-                          for (final status in AccountStatus.values)
-                            DropdownMenuEntry(
-                              value: status,
-                              label: status.label,
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        DropdownMenu<AccountStatus?>(
+                          key: ValueKey(query.accountStatus),
+                          initialSelection: query.accountStatus,
+                          label: const Text('Account'),
+                          dropdownMenuEntries: [
+                            const DropdownMenuEntry(
+                              value: null,
+                              label: 'All accounts',
                             ),
-                        ],
-                        onSelected: (value) => _updateQuery(
+                            for (final status in AccountStatus.values)
+                              DropdownMenuEntry(
+                                value: status,
+                                label: status.label,
+                              ),
+                          ],
+                          onSelected: (value) => _updateQuery(
+                            query.copyWith(
+                              accountStatus: value,
+                              clearAccountStatus: value == null,
+                              offset: 0,
+                            ),
+                          ),
+                        ),
+                        DropdownMenu<WorkerCategory?>(
+                          key: ValueKey(query.category),
+                          initialSelection: query.category,
+                          label: const Text('Category'),
+                          dropdownMenuEntries: [
+                            const DropdownMenuEntry(
+                              value: null,
+                              label: 'All categories',
+                            ),
+                            for (final category in WorkerCategory.values)
+                              DropdownMenuEntry(
+                                value: category,
+                                label: category.label,
+                              ),
+                          ],
+                          onSelected: (value) => _updateQuery(
+                            query.copyWith(
+                              category: value,
+                              clearCategory: value == null,
+                              offset: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => _updateQuery(
                           query.copyWith(
-                            accountStatus: value,
-                            clearAccountStatus: value == null,
+                            accountStatus: AccountStatus.pendingApproval,
+                            clearAccountStatus: false,
                             offset: 0,
                           ),
                         ),
+                        icon: const Icon(Icons.pending_actions),
+                        label: const Text('Pending approvals'),
                       ),
-                      DropdownMenu<WorkerCategory?>(
-                        initialSelection: query.category,
-                        label: const Text('Category'),
-                        dropdownMenuEntries: [
-                          const DropdownMenuEntry(
-                            value: null,
-                            label: 'All categories',
-                          ),
-                          for (final category in WorkerCategory.values)
-                            DropdownMenuEntry(
-                              value: category,
-                              label: category.label,
-                            ),
-                        ],
-                        onSelected: (value) => _updateQuery(
-                          query.copyWith(
-                            category: value,
-                            clearCategory: value == null,
-                            offset: 0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () => _updateQuery(
-                        query.copyWith(
-                          accountStatus: AccountStatus.pendingApproval,
-                          clearAccountStatus: false,
-                          offset: 0,
-                        ),
-                      ),
-                      icon: const Icon(Icons.pending_actions),
-                      label: const Text('Pending approvals'),
                     ),
-                  ),
-                  if (widget.role == AppRole.admin ||
-                      widget.role == AppRole.superAdmin)
-                    const _StaffPanel(),
-                ],
+                    if (widget.role == AppRole.admin ||
+                        widget.role == AppRole.superAdmin)
+                      const _StaffPanel(),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {
-                  ref.invalidate(workerDirectoryProvider);
-                  await ref.read(workerDirectoryProvider.future);
-                },
-                child: workers.when(
-                  data: (items) {
-                    if (items.isEmpty) {
-                      return ListView(
-                        children: const [
-                          SizedBox(height: 160),
-                          Center(child: Text('No workers found')),
-                        ],
-                      );
-                    }
-                    return ListView.separated(
-                      itemCount: items.length + 1,
-                      separatorBuilder: (context, index) => const Divider(),
-                      itemBuilder: (context, index) {
-                        if (index == items.length) {
-                          return _Pager(
-                            query: query,
-                            hasMore: items.length == query.limit,
-                            onQuery: _updateQuery,
-                          );
-                        }
-                        final worker = items[index];
-                        return ListTile(
+              workers.when(
+                data: (items) {
+                  if (items.isEmpty) {
+                    return AppEmptyState(
+                      icon: Icons.people_outline_rounded,
+                      title: 'No workers found',
+                      message: 'Try another name, phone number or filter.',
+                      action: TextButton(
+                        onPressed: () {
+                          _search.clear();
+                          ref.read(workerSearchTextProvider.notifier).state =
+                              '';
+                          _updateQuery(const WorkerDirectoryQuery());
+                        },
+                        child: const Text('Clear filters'),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: items.length + 1,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      if (index == items.length) {
+                        return _Pager(
+                          query: query,
+                          hasMore: items.length == query.limit,
+                          onQuery: _updateQuery,
+                        );
+                      }
+                      final worker = items[index];
+                      return Card(
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                           leading: _ProfileAvatar(
                             path: worker.profilePhotoPath,
                           ),
@@ -175,30 +198,33 @@ class _WorkerDirectoryScreenState extends ConsumerState<WorkerDirectoryScreen> {
                           onTap: () => context.go(
                             '${widget.role.homePath}/workers/${worker.userId}',
                           ),
-                        );
-                      },
-                    );
-                  },
-                  error: (error, stackTrace) => ListView(
-                    children: [
-                      const SizedBox(height: 120),
-                      Center(child: Text(error.toString())),
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () =>
-                              ref.invalidate(workerDirectoryProvider),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry'),
                         ),
+                      );
+                    },
+                  );
+                },
+                error: (error, stackTrace) => ListView(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    const SizedBox(height: 120),
+                    const Center(
+                      child: Text('Couldn’t load workers. Please try again.'),
+                    ),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            ref.invalidate(workerDirectoryProvider),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
                       ),
-                    ],
-                  ),
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
+                    ),
+                  ],
                 ),
+                loading: () => const Center(child: CircularProgressIndicator()),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -267,8 +293,9 @@ class _Pager extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           TextButton.icon(
             onPressed: query.offset == 0
@@ -345,7 +372,10 @@ class _StaffPanel extends ConsumerWidget {
               ],
             );
           },
-          error: (error, stackTrace) => ListTile(title: Text(error.toString())),
+          error: (error, stackTrace) => ListTile(
+            leading: const Icon(Icons.error_outline),
+            title: Text(friendlyAuthError(error)),
+          ),
           loading: () =>
               const ListTile(title: Center(child: CircularProgressIndicator())),
         ),
@@ -365,7 +395,6 @@ class _ProvisionStaffDialog extends ConsumerStatefulWidget {
 class _ProvisionStaffDialogState extends ConsumerState<_ProvisionStaffDialog> {
   final _fullName = TextEditingController();
   final _initials = TextEditingController();
-  final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
   final _reason = TextEditingController();
@@ -377,7 +406,6 @@ class _ProvisionStaffDialogState extends ConsumerState<_ProvisionStaffDialog> {
   void dispose() {
     _fullName.dispose();
     _initials.dispose();
-    _email.dispose();
     _phone.dispose();
     _password.dispose();
     _reason.dispose();
@@ -389,36 +417,38 @@ class _ProvisionStaffDialogState extends ConsumerState<_ProvisionStaffDialog> {
     return AlertDialog(
       title: const Text('Add staff account'),
       content: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 16,
           children: [
+            const Text(
+              'Create a team account. They’ll sign in with their WhatsApp number and the password you set.',
+            ),
             TextField(
               controller: _fullName,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Full name'),
             ),
             TextField(
               controller: _initials,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Initials'),
-            ),
-            TextField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: 'Email'),
             ),
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
-            ),
-            TextField(
-              controller: _password,
-              obscureText: true,
               decoration: const InputDecoration(
-                labelText: 'Temporary password',
+                labelText: 'WhatsApp number',
+                prefixText: '+91 ',
+                hintText: '98765 43210',
               ),
             ),
+            PasswordField(controller: _password, label: 'Temporary password'),
             DropdownButtonFormField<AppRole>(
+              isExpanded: true,
               initialValue: _role,
               decoration: const InputDecoration(labelText: 'Role'),
               items: const [
@@ -473,7 +503,6 @@ class _ProvisionStaffDialogState extends ConsumerState<_ProvisionStaffDialog> {
             StaffProvisionRequest(
               fullName: _fullName.text.trim(),
               initials: _initials.text.trim(),
-              email: _email.text.trim(),
               phoneE164: _phone.text.trim(),
               password: _password.text,
               role: _role,
@@ -483,7 +512,7 @@ class _ProvisionStaffDialogState extends ConsumerState<_ProvisionStaffDialog> {
       ref.invalidate(staffDirectoryProvider);
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = friendlyAuthError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -515,24 +544,27 @@ class _PhoneChangeDialogState extends ConsumerState<_PhoneChangeDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Change phone'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _phone,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'New phone'),
-          ),
-          TextField(
-            controller: _reason,
-            decoration: const InputDecoration(labelText: 'Reason'),
-          ),
-          if (_error != null)
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 16,
+          children: [
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'New phone'),
             ),
-        ],
+            TextField(
+              controller: _reason,
+              decoration: const InputDecoration(labelText: 'Reason'),
+            ),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -557,13 +589,13 @@ class _PhoneChangeDialogState extends ConsumerState<_PhoneChangeDialog> {
           .read(workerRepositoryProvider)
           .changeUserPhone(
             userId: widget.userId,
-            phoneE164: _phone.text.trim(),
+            phoneE164: PhoneNumber.parse(_phone.text).value,
             reason: _reason.text.trim(),
           );
       ref.invalidate(staffDirectoryProvider);
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = friendlyAuthError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

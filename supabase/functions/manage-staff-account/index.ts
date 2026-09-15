@@ -2,7 +2,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type ProvisionRequest = {
   action: "provision_staff";
-  email: string;
   phone: string;
   password: string;
   full_name: string;
@@ -13,6 +12,22 @@ type ProvisionRequest = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+function normalizeIndianPhone(input: string): string | null {
+  const digits = input.replace(/[^0-9]/g, "");
+  const withoutLeadingZero = digits.startsWith("0") && digits.length === 11
+    ? digits.slice(1)
+    : digits;
+  if (withoutLeadingZero.length === 10) return `+91${withoutLeadingZero}`;
+  if (withoutLeadingZero.length === 12 && withoutLeadingZero.startsWith("91")) {
+    return `+${withoutLeadingZero}`;
+  }
+  return null;
+}
+
+function authEmail(phoneE164: string): string {
+  return `${phoneE164.replace(/[^0-9]/g, "")}@phone.oslava.local`;
+}
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
@@ -40,6 +55,13 @@ Deno.serve(async (request) => {
   if (body.action !== "provision_staff") {
     return Response.json({ error: "unsupported action" }, { status: 400 });
   }
+  const phone = normalizeIndianPhone(body.phone ?? "");
+  if (!phone) {
+    return Response.json(
+      { error: "Enter a valid 10 digit Indian WhatsApp number." },
+      { status: 400 },
+    );
+  }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -51,13 +73,14 @@ Deno.serve(async (request) => {
 
   const { data: authUser, error: createError } =
     await admin.auth.admin.createUser({
-      email: body.email,
+      email: authEmail(phone),
       password: body.password,
       email_confirm: true,
       user_metadata: {
+        auth_mode: "phone_password",
         provisioned_by: "manage-staff-account",
         intended_role: body.role,
-        contact_phone: body.phone,
+        phone_e164: phone,
       },
     });
 
@@ -73,7 +96,7 @@ Deno.serve(async (request) => {
     p_role: body.role,
     p_full_name: body.full_name,
     p_initials: body.initials,
-    p_phone_e164: body.phone,
+    p_phone_e164: phone,
     p_reason: body.reason,
   });
 

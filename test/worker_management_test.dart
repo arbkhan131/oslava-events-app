@@ -295,8 +295,7 @@ void main() {
       final request = StaffProvisionRequest(
         fullName: 'Captain One',
         initials: 'CO',
-        email: 'captain@example.test',
-        phoneE164: '+919876543211',
+        phoneE164: '98765 43211',
         password: 'temporary-secret',
         role: AppRole.captain,
         reason: 'Field lead setup',
@@ -304,7 +303,7 @@ void main() {
 
       expect(request.toFunctionBody(), {
         'action': 'provision_staff',
-        'email': 'captain@example.test',
+        'email': '919876543211@phone.oslava.local',
         'phone': '+919876543211',
         'password': 'temporary-secret',
         'full_name': 'Captain One',

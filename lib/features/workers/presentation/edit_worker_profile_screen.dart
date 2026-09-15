@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/widgets/app_feedback.dart';
 import '../../auth/data/profile_photo_preparer.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../data/worker_repository.dart';
 import '../domain/worker_profile.dart';
 import 'worker_profile_screen.dart';
@@ -61,96 +63,134 @@ class _EditWorkerProfileScreenState
             return Form(
               key: _formKey,
               child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.all(16),
-                children: [
-                  TextFormField(
-                    controller: _fullName,
-                    decoration: const InputDecoration(labelText: 'Full name'),
-                    validator: _required,
-                  ),
-                  TextFormField(
-                    controller: _initials,
-                    decoration: const InputDecoration(labelText: 'Initials'),
-                    validator: _required,
-                  ),
-                  TextFormField(
-                    controller: _address,
-                    decoration: const InputDecoration(labelText: 'Address'),
-                    validator: _required,
-                  ),
-                  TextFormField(
-                    controller: _nativePlace,
-                    decoration: const InputDecoration(
-                      labelText: 'Native place',
-                    ),
-                    validator: _required,
-                  ),
-                  TextFormField(
-                    controller: _height,
-                    decoration: const InputDecoration(labelText: 'Height cm'),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      final parsed = double.tryParse(value ?? '');
-                      if (parsed == null || parsed <= 0) {
-                        return 'Enter a valid height.';
-                      }
-                      return null;
-                    },
-                  ),
-                  TextFormField(
-                    controller: _education,
-                    decoration: const InputDecoration(
-                      labelText: 'Education status',
-                    ),
-                    validator: _required,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Previous event experience'),
-                    value: _hasPreviousExperience,
-                    onChanged: _saving
-                        ? null
-                        : (value) =>
-                              setState(() => _hasPreviousExperience = value),
-                  ),
-                  TextFormField(
-                    controller: _experienceDetails,
-                    decoration: const InputDecoration(
-                      labelText: 'Experience details',
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 12),
-                  if (_photoBytes != null)
-                    Image.memory(
-                      _photoBytes!,
-                      height: 120,
-                      semanticLabel: 'Selected profile photo',
-                    ),
-                  OutlinedButton.icon(
-                    onPressed: _saving ? null : () => _pickPhoto(worker),
-                    icon: const Icon(Icons.photo_camera),
-                    label: Text(
-                      _photoName == null
-                          ? 'Replace profile photo'
-                          : 'Photo ready',
-                    ),
-                  ),
-                  if (_message != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_message!),
-                  ],
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : () => _save(worker),
-                    icon: const Icon(Icons.save),
-                    label: Text(_saving ? 'Saving...' : 'Save'),
-                  ),
-                ],
+                children:
+                    [
+                          TextFormField(
+                            controller: _fullName,
+                            decoration: const InputDecoration(
+                              labelText: 'Full name',
+                            ),
+                            validator: _required,
+                          ),
+                          TextFormField(
+                            controller: _initials,
+                            decoration: const InputDecoration(
+                              labelText: 'Initials',
+                            ),
+                            validator: _required,
+                          ),
+                          TextFormField(
+                            controller: _address,
+                            decoration: const InputDecoration(
+                              labelText: 'Address',
+                            ),
+                            validator: _required,
+                          ),
+                          TextFormField(
+                            controller: _nativePlace,
+                            decoration: const InputDecoration(
+                              labelText: 'Native place',
+                            ),
+                            validator: _required,
+                          ),
+                          TextFormField(
+                            controller: _height,
+                            decoration: const InputDecoration(
+                              labelText: 'Height cm',
+                            ),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              final parsed = double.tryParse(value ?? '');
+                              if (parsed == null || parsed <= 0) {
+                                return 'Enter a valid height.';
+                              }
+                              return null;
+                            },
+                          ),
+                          TextFormField(
+                            controller: _education,
+                            decoration: const InputDecoration(
+                              labelText: 'Education status',
+                            ),
+                            validator: _required,
+                          ),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Previous event experience'),
+                            value: _hasPreviousExperience,
+                            onChanged: _saving
+                                ? null
+                                : (value) => setState(
+                                    () => _hasPreviousExperience = value,
+                                  ),
+                          ),
+                          TextFormField(
+                            controller: _experienceDetails,
+                            decoration: const InputDecoration(
+                              labelText: 'Experience details',
+                            ),
+                            maxLines: 3,
+                          ),
+                          const SizedBox(height: 12),
+                          if (_photoBytes != null)
+                            Image.memory(
+                              _photoBytes!,
+                              height: 120,
+                              semanticLabel: 'Selected profile photo',
+                            ),
+                          OutlinedButton.icon(
+                            onPressed: _saving
+                                ? null
+                                : () => _pickPhoto(worker),
+                            icon: const Icon(Icons.photo_camera),
+                            label: Text(
+                              _photoName == null
+                                  ? 'Replace profile photo'
+                                  : 'Photo ready',
+                            ),
+                          ),
+                          if (_message != null) ...[
+                            const SizedBox(height: 8),
+                            AppNotice(
+                              message: _message!,
+                              isError: !_message!.startsWith('Photo selected'),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: _saving ? null : () => _save(worker),
+                            icon: const Icon(Icons.save),
+                            label: Text(_saving ? 'Saving...' : 'Save'),
+                          ),
+                        ]
+                        .map(
+                          (child) => Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: child,
+                          ),
+                        )
+                        .toList(),
               ),
             );
           },
-          error: (error, stackTrace) => Center(child: Text(error.toString())),
+          error: (error, stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: AppEmptyState(
+                icon: Icons.person_off_outlined,
+                title: 'Could not load profile',
+                message: friendlyAuthError(error),
+                action: OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(ownWorkerProfileProvider),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ),
+            ),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
@@ -179,7 +219,7 @@ class _EditWorkerProfileScreenState
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _message = error.toString());
+      if (mounted) setState(() => _message = friendlyAuthError(error));
     }
   }
 
@@ -250,6 +290,8 @@ class _EditWorkerProfileScreenState
       if (mounted) {
         context.go('/worker/profile');
       }
+    } catch (error) {
+      if (mounted) setState(() => _message = friendlyAuthError(error));
     } finally {
       if (mounted) {
         setState(() => _saving = false);

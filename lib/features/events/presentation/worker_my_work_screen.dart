@@ -8,6 +8,8 @@ import '../data/event_repository.dart';
 import '../domain/event_summary.dart';
 import 'worker_event_detail_screen.dart';
 import 'worker_event_list_screen.dart';
+import '../../../core/widgets/app_feedback.dart';
+import '../../auth/presentation/auth_widgets.dart';
 
 final workerAssignmentsProvider = FutureProvider<List<WorkerAssignment>>(
   (ref) => ref.watch(eventRepositoryProvider).loadWorkerAssignments(),
@@ -41,6 +43,8 @@ class WorkerMyWorkScreen extends ConsumerWidget {
             ),
           ],
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Confirmed'),
               Tab(text: 'Waitlist'),
@@ -94,13 +98,13 @@ class WorkerMyWorkScreen extends ConsumerWidget {
                 ],
               ),
               error: (error, _) => _ErrorState(
-                message: error.toString(),
+                message: 'Couldn’t load your waitlist. Please try again.',
                 onRetry: () => ref.invalidate(workerWaitlistProvider),
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
             ),
             error: (error, _) => _ErrorState(
-              message: error.toString(),
+              message: 'Couldn’t load your work. Please try again.',
               onRetry: () => ref.invalidate(workerAssignmentsProvider),
             ),
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -120,25 +124,42 @@ class _AssignmentList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (items.isEmpty) {
-      return Center(child: Text(emptyLabel));
+      return ListView(
+        children: [
+          AppEmptyState(
+            icon: Icons.work_outline_rounded,
+            title: emptyLabel,
+            message: 'Explore upcoming events to find your next opportunity.',
+            action: OutlinedButton(
+              onPressed: () => context.go('/worker/events'),
+              child: const Text('Explore events'),
+            ),
+          ),
+        ],
+      );
     }
     return ListView.separated(
+      padding: const EdgeInsets.all(16),
       itemCount: items.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
+      separatorBuilder: (context, index) => const SizedBox(height: 4),
       itemBuilder: (context, index) {
         final item = items[index];
-        return ListTile(
-          title: Text(item.title),
-          subtitle: Text(
-            '${item.venueName}\n${item.reportingLabel}\nCancel before ${formatKolkataDateTime12h(item.cancellationDeadlineAt)}',
-          ),
-          isThreeLine: true,
-          onTap: () => context.go('/worker/events/${item.eventId}'),
-          trailing: item.canCancel
-              ? IconButton(
-                  tooltip: 'Cancel assignment',
+        return _WorkCard(
+          title: item.title,
+          venue: item.venueName,
+          reporting: item.reportingLabel,
+          status: item.status == AssignmentStatus.completed
+              ? 'Completed'
+              : 'Confirmed',
+          detail: item.status == AssignmentStatus.completed
+              ? 'This event is in your work history.'
+              : 'Cancellation deadline: ${formatKolkataDateTime12h(item.cancellationDeadlineAt)}',
+          onOpen: () => context.go('/worker/events/${item.eventId}'),
+          secondaryAction: item.canCancel
+              ? TextButton.icon(
                   onPressed: () => _cancel(context, ref, item),
-                  icon: const Icon(Icons.cancel),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancel assignment'),
                 )
               : null,
         );
@@ -176,7 +197,7 @@ class _AssignmentList extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }
@@ -188,25 +209,34 @@ class _WaitlistList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (items.isEmpty) {
-      return const Center(child: Text('No active waitlist entries'));
+      return ListView(
+        children: const [
+          AppEmptyState(
+            icon: Icons.hourglass_empty_rounded,
+            title: 'No active waitlist entries',
+            message: 'When you join a full event’s waitlist, your position will appear here.',
+          ),
+        ],
+      );
     }
     return ListView.separated(
+      padding: const EdgeInsets.all(16),
       itemCount: items.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
+      separatorBuilder: (context, index) => const SizedBox(height: 4),
       itemBuilder: (context, index) {
         final item = items[index];
-        return ListTile(
-          title: Text(item.title),
-          subtitle: Text(
-            '${item.venueName}\n${item.reportingLabel}\nPosition ${item.queuePosition ?? '-'}',
-          ),
-          isThreeLine: true,
-          onTap: () => context.go('/worker/events/${item.eventId}'),
-          trailing: item.canWithdraw
-              ? IconButton(
-                  tooltip: 'Withdraw waitlist',
+        return _WorkCard(
+          title: item.title,
+          venue: item.venueName,
+          reporting: item.reportingLabel,
+          status: 'Waitlist',
+          detail: 'Queue position: ${item.queuePosition ?? 'Pending'}',
+          onOpen: () => context.go('/worker/events/${item.eventId}'),
+          secondaryAction: item.canWithdraw
+              ? TextButton.icon(
                   onPressed: () => _withdraw(context, ref, item),
                   icon: const Icon(Icons.playlist_remove),
+                  label: const Text('Withdraw waitlist'),
                 )
               : null,
         );
@@ -240,7 +270,7 @@ class _WaitlistList extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }
@@ -278,6 +308,68 @@ class _HistoryList extends StatelessWidget {
   }
 }
 
+class _WorkCard extends StatelessWidget {
+  const _WorkCard({
+    required this.title,
+    required this.venue,
+    required this.reporting,
+    required this.status,
+    required this.detail,
+    required this.onOpen,
+    this.secondaryAction,
+  });
+  final String title, venue, reporting, status, detail;
+  final VoidCallback onOpen;
+  final Widget? secondaryAction;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Chip(
+            avatar: Icon(
+              status == 'Completed'
+                  ? Icons.task_alt
+                  : status == 'Waitlist'
+                  ? Icons.hourglass_empty
+                  : Icons.event_available,
+              size: 18,
+            ),
+            label: Text(status),
+          ),
+          const SizedBox(height: 8),
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          Text(venue),
+          const SizedBox(height: 8),
+          Text(
+            'Reporting · $reporting',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const Divider(height: 28),
+          Text(detail, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onOpen,
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: const Text('View event'),
+              ),
+              ?secondaryAction,
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.message, required this.onRetry});
   final String message;
@@ -307,6 +399,7 @@ class _ReasonDialog extends StatefulWidget {
 
 class _ReasonDialogState extends State<_ReasonDialog> {
   final _reason = TextEditingController();
+  final _form = GlobalKey<FormState>();
   @override
   void dispose() {
     _reason.dispose();
@@ -316,10 +409,30 @@ class _ReasonDialogState extends State<_ReasonDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.title),
-    content: TextField(
-      controller: _reason,
-      decoration: const InputDecoration(labelText: 'Reason'),
-      autofocus: true,
+    content: SingleChildScrollView(
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will release your place. Review your decision before continuing.',
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reason,
+              decoration: const InputDecoration(labelText: 'Reason'),
+              minLines: 2,
+              maxLines: 4,
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter a reason to continue.'
+                  : null,
+              autofocus: true,
+            ),
+          ],
+        ),
+      ),
     ),
     actions: [
       TextButton(
@@ -327,8 +440,12 @@ class _ReasonDialogState extends State<_ReasonDialog> {
         child: const Text('Back'),
       ),
       FilledButton(
-        onPressed: () => Navigator.of(context).pop(_reason.text),
-        child: const Text('Save'),
+        onPressed: () {
+          if (_form.currentState!.validate()) {
+            Navigator.of(context).pop(_reason.text);
+          }
+        },
+        child: const Text('Confirm'),
       ),
     ],
   );

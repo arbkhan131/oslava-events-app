@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/app_feedback.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../data/worker_repository.dart';
 import '../domain/worker_profile.dart';
 
@@ -62,7 +64,21 @@ class WorkerProfileScreen extends ConsumerWidget {
               const _PrivacyAndDeletionSection(),
             ],
           ),
-          error: (error, stackTrace) => Center(child: Text(error.toString())),
+          error: (error, stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: AppEmptyState(
+                icon: Icons.person_off_outlined,
+                title: 'Could not load profile',
+                message: friendlyAuthError(error),
+                action: OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(ownWorkerProfileProvider),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ),
+            ),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
@@ -230,8 +246,9 @@ class _PrivacyAndDeletionSectionState
             const SizedBox(height: 12),
             requests.when(
               data: (items) => _ErasureStatusList(items: items),
-              error: (error, _) =>
-                  Text('Could not load request status: $error'),
+              error: (error, _) => Text(
+                'Could not load request status: ${friendlyAuthError(error)}',
+              ),
               loading: () => const LinearProgressIndicator(),
             ),
             const SizedBox(height: 12),
@@ -268,7 +285,11 @@ class _PrivacyAndDeletionSectionState
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not submit request: $error')),
+          SnackBar(
+            content: Text(
+              'Could not submit request: ${friendlyAuthError(error)}',
+            ),
+          ),
         );
       }
     } finally {

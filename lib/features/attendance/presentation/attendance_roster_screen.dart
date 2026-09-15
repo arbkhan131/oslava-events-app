@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/app_feedback.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../../events/domain/event_summary.dart';
 import '../../workers/domain/worker_profile.dart';
 import '../../performance/domain/performance_review.dart';
@@ -155,7 +157,22 @@ class _AttendanceRosterScreenState
               ),
             );
           },
-          error: (error, stackTrace) => Center(child: Text(error.toString())),
+          error: (error, stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: AppEmptyState(
+                icon: Icons.assignment_late_outlined,
+                title: 'Could not load attendance',
+                message: friendlyAuthError(error),
+                action: OutlinedButton.icon(
+                  onPressed: () =>
+                      ref.invalidate(attendanceRosterProvider(query)),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ),
+            ),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
@@ -183,7 +200,7 @@ class _AttendanceRosterScreenState
         return;
       }
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
+          .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
     }
   }
 
@@ -211,7 +228,7 @@ class _AttendanceRosterScreenState
         return;
       }
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
+          .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
     }
   }
 }

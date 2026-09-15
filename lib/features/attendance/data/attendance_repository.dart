@@ -64,7 +64,7 @@ class SupabaseAttendanceRepository implements AttendanceRepository {
     final response = await _client.rpc(
       'event_attendance_roster_v2',
       params: {'p_event_id': eventId, 'p_search_text': searchText},
-    );
+    ).timeout(const Duration(seconds: 20));
     return (response as List<dynamic>)
         .map(
           (row) => AttendanceRosterEntry.fromJson(

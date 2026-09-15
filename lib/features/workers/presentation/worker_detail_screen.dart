@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_feedback.dart';
 import '../../auth/application/auth_session.dart';
+import '../../auth/domain/phone_number.dart';
+import '../../auth/presentation/auth_widgets.dart';
 import '../data/worker_repository.dart';
 import '../domain/worker_profile.dart';
 import 'worker_directory_screen.dart';
@@ -121,7 +124,8 @@ class WorkerDetailScreen extends ConsumerWidget {
                     ],
                   );
                 },
-                error: (error, stackTrace) => Text(error.toString()),
+                error: (error, stackTrace) =>
+                    AppNotice(message: friendlyAuthError(error), isError: true),
                 loading: () => const Padding(
                   padding: EdgeInsets.all(16),
                   child: CircularProgressIndicator(),
@@ -129,7 +133,21 @@ class WorkerDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
-          error: (error, stackTrace) => Center(child: Text(error.toString())),
+          error: (error, stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: AppEmptyState(
+                icon: Icons.manage_accounts_outlined,
+                title: 'Could not load worker',
+                message: friendlyAuthError(error),
+                action: OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(workerDetailProvider(userId)),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ),
+            ),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
@@ -164,7 +182,7 @@ class WorkerDetailScreen extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }
@@ -237,7 +255,7 @@ class WorkerDetailScreen extends ConsumerWidget {
         return;
       }
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
+          .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
     }
   }
 }
@@ -320,7 +338,7 @@ class _RegistrationSummary extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }
@@ -457,7 +475,7 @@ class _RegistrationReviewActions extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
       }
     }
   }
@@ -615,7 +633,7 @@ class _PhoneChangeDialogState extends State<_PhoneChangeDialog> {
         FilledButton(
           onPressed: () => Navigator.of(context).pop(
             _PhoneChangeRequest(
-              phoneE164: _phone.text.trim(),
+              phoneE164: PhoneNumber.parse(_phone.text).value,
               reason: _reason.text.trim(),
             ),
           ),

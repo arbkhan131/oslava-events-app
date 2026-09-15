@@ -185,6 +185,9 @@ class EventSummary {
     required this.recruitmentStatus,
     required this.tierStrategy,
     required this.version,
+    this.confirmedCount = 0,
+    this.waitlistCount = 0,
+    this.vacantCount,
   });
 
   final String id;
@@ -200,6 +203,9 @@ class EventSummary {
   final RecruitmentStatus recruitmentStatus;
   final TierStrategy tierStrategy;
   final int version;
+  final int confirmedCount;
+  final int waitlistCount;
+  final int? vacantCount;
 
   static EventSummary fromJson(Map<String, dynamic> json) {
     return EventSummary(
@@ -218,6 +224,9 @@ class EventSummary {
       ),
       tierStrategy: TierStrategy.fromDatabase(json['tier_strategy'] as String),
       version: (json['version'] as num).toInt(),
+      confirmedCount: (json['confirmed_count'] as num?)?.toInt() ?? 0,
+      waitlistCount: (json['waitlist_count'] as num?)?.toInt() ?? 0,
+      vacantCount: (json['vacant_count'] as num?)?.toInt(),
     );
   }
 }

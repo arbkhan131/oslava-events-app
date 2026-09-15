@@ -12,6 +12,9 @@ import '../data/profile_photo_preparer.dart';
 import '../domain/phone_number.dart';
 import '../domain/worker_registration_input.dart';
 import 'auth_widgets.dart';
+import '../../../core/widgets/app_section_heading.dart';
+import '../../../core/widgets/app_feedback.dart';
+import '../../../core/widgets/document_upload_card.dart';
 
 class WorkerRegistrationScreen extends ConsumerStatefulWidget {
   const WorkerRegistrationScreen({super.key});
@@ -140,7 +143,6 @@ class _WorkerRegistrationScreenState
           _profilePhotoBytes = prepared.bytes;
           _profilePhotoMimeType = prepared.mimeType;
           _profilePhotoName = picked.name;
-          _message = 'Passport size photo selected.';
         });
       }
     } catch (e) {
@@ -158,7 +160,6 @@ class _WorkerRegistrationScreenState
           _idCardBytes = bytes;
           _idCardName = file.name;
           _idCardMimeType = _idMimeTypeFromName(file.name);
-          _message = 'ID card selected.';
         });
       }
     } catch (e) {
@@ -205,6 +206,24 @@ class _WorkerRegistrationScreenState
 
   Future<void> _submit() async {
     if (_isSubmitting || _terms == null) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final height = double.tryParse(_heightController.text.trim());
+    String? validation;
+    if (_fullNameController.text.trim().isEmpty) {
+      validation = 'Enter your name with initial in Personal details.';
+    } else if (_placeController.text.trim().isEmpty) {
+      validation = 'Enter your place in Personal details.';
+    } else if (height == null || !height.isFinite || height <= 0) {
+      validation = 'Enter your height in centimetres in Work profile.';
+    } else if (_educationController.text.trim().isEmpty) {
+      validation = 'Enter your studying class in Work profile.';
+    } else if (_passwordController.text.length < 6) {
+      validation = 'Choose a password with at least six characters.';
+    }
+    if (validation != null) {
+      setState(() => _message = validation);
+      return;
+    }
     final dob = _dateOfBirth;
     if (!_acceptedPrivacyTerms) {
       setState(() {
@@ -242,7 +261,7 @@ class _WorkerRegistrationScreenState
         idCardFilePath: 'pending-client-id-card',
         dateOfBirth: dob,
         place: _placeController.text,
-        heightCm: double.parse(_heightController.text),
+        heightCm: height!,
         educationStatus: _educationController.text,
         experienceLevel: _experienceLevel,
         requestedCategory: _registrationType == WorkerRegistrationType.oldWorker
@@ -269,6 +288,9 @@ class _WorkerRegistrationScreenState
     } on FormatException catch (e) {
       if (mounted) setState(() => _message = e.message);
     } catch (e) {
+      try {
+        await logout(ref);
+      } catch (_) {}
       if (mounted) setState(() => _message = friendlyAuthError(e));
     } finally {
       controller.setAuthFlowInProgress(false);
@@ -309,6 +331,15 @@ class _WorkerRegistrationScreenState
       ),
       body: AuthFormBody(
         children: [
+          Text(
+            'Join the Oslava team',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Create your profile. A captain or supervisor will review it before you can receive and accept work.',
+          ),
+          const SizedBox(height: 24),
           SegmentedButton<WorkerRegistrationType>(
             segments: const [
               ButtonSegment(
@@ -333,9 +364,14 @@ class _WorkerRegistrationScreenState
                     });
                   },
           ),
-          const SizedBox(height: 16),
+          const AppSectionHeading(
+            title: '01  Personal details',
+            subtitle: 'Tell us a little about yourself.',
+          ),
           TextField(
             controller: _fullNameController,
+            textCapitalization: TextCapitalization.words,
+            autofillHints: const [AutofillHints.name],
             textInputAction: TextInputAction.next,
             decoration: const InputDecoration(
               labelText: 'Name with initial',
@@ -345,6 +381,7 @@ class _WorkerRegistrationScreenState
           const SizedBox(height: 12),
           TextField(
             controller: _placeController,
+            textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             decoration: const InputDecoration(labelText: 'Place'),
           ),
@@ -364,11 +401,19 @@ class _WorkerRegistrationScreenState
             ),
           ),
           const SizedBox(height: 12),
+          const AppSectionHeading(
+            title: '02  Work profile',
+            subtitle: 'Help your team get to know your experience.',
+          ),
           TextField(
             controller: _heightController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Height in cm'),
+            decoration: const InputDecoration(
+              labelText: 'Height in cm',
+              hintText: '170',
+              suffixText: 'cm',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -381,6 +426,7 @@ class _WorkerRegistrationScreenState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<WorkerExperienceLevel>(
+            isExpanded: true,
             initialValue: _experienceLevel,
             decoration: const InputDecoration(labelText: 'Work experience'),
             items: WorkerExperienceLevel.values
@@ -396,6 +442,7 @@ class _WorkerRegistrationScreenState
           if (_registrationType == WorkerRegistrationType.oldWorker) ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<RegistrationWorkerCategory>(
+              isExpanded: true,
               initialValue: _requestedCategory,
               decoration: const InputDecoration(
                 labelText: 'Old worker category',
@@ -419,35 +466,44 @@ class _WorkerRegistrationScreenState
             child: Text(
               _dateOfBirth == null
                   ? 'Select date of birth'
-                  : 'Date of birth: ${_dateOfBirth!.toIso8601String().split('T').first} (${age ?? 0} years)',
+                  : 'Date of birth: ${MaterialLocalizations.of(context).formatMediumDate(_dateOfBirth!)} (${age ?? 0} years)',
             ),
           ),
           const SizedBox(height: 12),
+          const AppSectionHeading(
+            title: '03  Account & documents',
+            subtitle: 'Add your password, passport photo and ID for review.',
+          ),
           PasswordField(
             controller: _passwordController,
             label: 'Create password',
           ),
           const SizedBox(height: 16),
-          if (_profilePhotoBytes != null)
-            Image.memory(
-              _profilePhotoBytes!,
-              height: 120,
-              semanticLabel: 'Selected passport size photo',
-            ),
-          OutlinedButton.icon(
-            onPressed: _isSubmitting ? null : _pickProfilePhoto,
-            icon: const Icon(Icons.photo),
-            label: Text(
-              _profilePhotoName == null
-                  ? 'Upload passport size photo'
-                  : 'Passport photo selected',
-            ),
+          DocumentUploadCard(
+            title: 'Passport size photo',
+            description: 'Choose a clear photo of your face.',
+            icon: Icons.add_a_photo_outlined,
+            onTap: _isSubmitting ? null : _pickProfilePhoto,
+            fileName: _profilePhotoName,
+            preview: _profilePhotoBytes == null
+                ? null
+                : Image.memory(
+                    _profilePhotoBytes!,
+                    height: 120,
+                    semanticLabel: 'Selected passport size photo',
+                  ),
           ),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _isSubmitting ? null : _pickIdCard,
-            icon: const Icon(Icons.badge_outlined),
-            label: Text(_idCardName == null ? 'Upload ID card' : _idCardName!),
+          DocumentUploadCard(
+            title: 'ID card',
+            description: 'PDF, image or another document format.',
+            icon: Icons.upload_file_outlined,
+            onTap: _isSubmitting ? null : _pickIdCard,
+            fileName: _idCardName,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'ID card: PDF, image or another file. Your documents are used for registration review.',
           ),
           CheckboxListTile(
             value: _acceptedPrivacyTerms,
@@ -488,14 +544,14 @@ class _WorkerRegistrationScreenState
             ),
           ),
           const SizedBox(height: 20),
+          if (_message != null) ...[
+            AppNotice(message: _message!, isError: true),
+            const SizedBox(height: 12),
+          ],
           FilledButton(
             onPressed: _isSubmitting || _terms == null ? null : _submit,
             child: Text(_isSubmitting ? 'Registering…' : 'Submit registration'),
           ),
-          if (_message != null) ...[
-            const SizedBox(height: 12),
-            Text(_message!),
-          ],
         ],
       ),
     );

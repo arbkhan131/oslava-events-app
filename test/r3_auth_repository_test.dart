@@ -101,6 +101,19 @@ class AuthServer {
       idCardUploads++;
       body = {'Key': 'worker-id-cards/$uid/id.pdf'};
     } else if (path.endsWith('/my_profile')) {
+      if (profile == null) {
+        return http.Response(
+          jsonEncode({
+            'code': 'PGRST116',
+            'details': 'The result contains 0 rows',
+            'hint': null,
+            'message': 'Cannot coerce the result to a single JSON object',
+          }),
+          406,
+          headers: {'content-type': 'application/json'},
+          request: request,
+        );
+      }
       body = profile;
     } else if (path.endsWith('/complete_phone_worker_registration')) {
       if (failCompletion) {
@@ -120,7 +133,16 @@ class AuthServer {
           'account_status': 'PENDING_APPROVAL',
           'worker_number': 93001,
         };
-        body = [];
+        body = [
+          {
+            'user_id': uid,
+            'worker_number': 93001,
+            'role': 'WORKER',
+            'category': 'F',
+            'requested_category': null,
+            'account_status': 'PENDING_APPROVAL',
+          },
+        ];
       }
     } else if (path.endsWith('/privacy_terms_versions')) {
       body = {
